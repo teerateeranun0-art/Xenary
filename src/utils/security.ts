@@ -34,6 +34,17 @@ export class Satang {
     return new Satang(satangs);
   }
 
+  static fromSatangs(satangs: number): Satang {
+    const rounded = Math.round(satangs);
+    if (!Number.isSafeInteger(rounded) || rounded < 0) {
+      throw new Error('invalid_negative_or_nan_amount');
+    }
+    if (rounded > Satang.MAX_ALLOWED.amountSatangs) {
+      throw new Error('amount_exceeds_maximum_threshold');
+    }
+    return new Satang(rounded);
+  }
+
   toThb(): number {
     return this.amountSatangs / 100;
   }

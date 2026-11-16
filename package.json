@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "tsx --test src/utils/security.test.ts src/db/adapter.test.ts"
+    "test": "tsx --test src/utils/security.test.ts src/db/adapter.test.ts src/utils/store-analytics.test.ts"
   },
   "dependencies": {
     "@firebase/eslint-plugin-security-rules": "^0.0.2",

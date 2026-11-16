@@ -226,10 +226,99 @@ function initStatusTile() {
     "/": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>',
     "/products": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>',
     "/account": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>',
-    "/status": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>',
+    "/orders": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+    "/status": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>',
     "/tos": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
     "/contact": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
   };
+
+  var DEFAULT_MARQUEE = "เติมเงินซื้อสินค้าอัตโนมัติ 24 ชม. · สินค้าดิจิทัลพร้อมส่งมอบทันที · เติมเงินซื้อสินค้าแล้ว ไม่มีนโยบายคืนเงินทุกกรณี";
+  var BELL_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+
+  function renderMarquee(text) {
+    var head = document.querySelector("header.xn-head");
+    if (!head) return;
+    var wrap = head.querySelector(".xn-marquee-wrap");
+    if (!wrap) {
+      wrap = document.createElement("div");
+      wrap.className = "xn-marquee-wrap";
+      wrap.innerHTML = '<div class="xn-marquee-track" id="xn-marquee-track"></div>';
+      head.appendChild(wrap);
+    }
+    var track = wrap.querySelector("#xn-marquee-track");
+    if (!track) return;
+    var cleanText = String(text || DEFAULT_MARQUEE).trim();
+    if (!cleanText) {
+      wrap.style.display = "none";
+      return;
+    }
+    wrap.style.display = "";
+    var itemHtml = '<span class="xn-marquee-item">' + BELL_SVG + '<span>' + escHtml(cleanText) + '</span></span>';
+    track.innerHTML = itemHtml + itemHtml + itemHtml + itemHtml + itemHtml + itemHtml;
+  }
+
+  function renderReferenceFooter(summary) {
+    var foot = document.querySelector("footer.xn-foot");
+    if (!foot) return;
+    var discordUrl = safeContactUrl((summary && summary.discord_url) || DISCORD_URL, "discord");
+    var youtubeUrl = safeContactUrl((summary && summary.youtube_url) || "https://www.youtube.com/@Xenary", "youtube");
+    var siteName = escHtml((summary && summary.site_name) || "XENARY");
+
+    foot.innerHTML =
+      '<div class="xn-foot-shell">' +
+        '<div class="xn-foot-cols">' +
+          '<div class="xn-foot-col">' +
+            '<a href="/" class="xn-foot-brand"><img src="/assets/img/logo.png" alt="' + siteName + '" width="32" height="32">' + siteName + '</a>' +
+            '<p class="xn-foot-desc">ร้านบริการจำหน่ายสินค้าดิจิทัลและซอฟต์แวร์คุณภาพ ราคาคุ้มค่า จัดส่งคีย์อัตโนมัติตลอด 24 ชั่วโมง</p>' +
+            '<div class="xn-foot-socials">' +
+              '<a href="' + escHtml(discordUrl) + '" data-discord target="_blank" rel="noopener noreferrer" class="xn-foot-soc-btn">' +
+                '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/></svg>' +
+                '<span>Discord</span>' +
+              '</a>' +
+              '<a href="' + escHtml(youtubeUrl) + '" target="_blank" rel="noopener noreferrer" class="xn-foot-soc-btn">' +
+                '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17"/><path d="m10 15 5-3-5-3v6Z"/></svg>' +
+                '<span>YouTube</span>' +
+              '</a>' +
+            '</div>' +
+          '</div>' +
+          '<div class="xn-foot-col">' +
+            '<h4>เมนูลัด</h4>' +
+            '<ul class="xn-foot-menu">' +
+              '<li><a href="/">' + NAV_ICONS["/"] + '<span>หน้าหลัก</span></a></li>' +
+              '<li><a href="/products/">' + NAV_ICONS["/products"] + '<span>หมวดหมู่สินค้า</span></a></li>' +
+              '<li><a href="/account/">' + NAV_ICONS["/account"] + '<span>เติมเงิน</span></a></li>' +
+              '<li><a href="/account/?tab=orders">' + NAV_ICONS["/orders"] + '<span>ประวัติการสั่งซื้อ</span></a></li>' +
+            '</ul>' +
+          '</div>' +
+          '<div class="xn-foot-col">' +
+            '<h4>ช่วยเหลือ</h4>' +
+            '<ul class="xn-foot-menu">' +
+              '<li><a href="/contact/">' + NAV_ICONS["/contact"] + '<span>ติดต่อร้านค้า</span></a></li>' +
+              '<li><a href="/status/">' + NAV_ICONS["/status"] + '<span>สถานะสินค้า &amp; ระบบ</span></a></li>' +
+              '<li><a href="/tos/">' + NAV_ICONS["/tos"] + '<span>เงื่อนไขการใช้บริการ</span></a></li>' +
+            '</ul>' +
+          '</div>' +
+        '</div>' +
+        '<div class="xn-foot-bottom">' +
+          '<div class="xn-foot-bottom-left">' +
+            '<span>&copy; 2026 ' + siteName + ' All rights reserved.</span>' +
+            '<span>&middot;</span>' +
+            '<span>Powered by <a href="/">XENARY Studio</a></span>' +
+          '</div>' +
+          '<div class="xn-foot-bottom-right">' +
+            '<a href="/tos/">นโยบาย &amp; เงื่อนไข</a>' +
+            '<button type="button" class="xn-foot-top-btn" id="xn-scroll-top-btn">กลับขึ้นข้างบน <span>&#9652;</span></button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    var topBtn = document.getElementById("xn-scroll-top-btn");
+    if (topBtn) {
+      topBtn.addEventListener("click", function () {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+    }
+  }
 
   function decorateNavBar() {
     var nav = document.querySelector(".xn-nav");
@@ -237,59 +326,44 @@ function initStatusTile() {
     var userBox = document.getElementById("xn-user");
     if (!nav || !linksBox) return;
 
-
     if (userBox && userBox.parentNode === linksBox) {
       nav.appendChild(userBox);
     }
 
-     
-    if (!linksBox.querySelector('a[href="/account/"]')) {
-      var prodLink = linksBox.querySelector('a[href="/products/"]');
-      var topupLink = document.createElement("a");
-      topupLink.setAttribute("href", "/account/");
-      topupLink.textContent = "เติมเงิน";
-      if (prodLink && prodLink.nextSibling) {
-        linksBox.insertBefore(topupLink, prodLink.nextSibling);
-      } else {
-        linksBox.appendChild(topupLink);
-      }
+    if (!linksBox.dataset.rebuilt) {
+      linksBox.innerHTML =
+        '<a href="/">หน้าหลัก</a>' +
+        '<a href="/products/">ร้านค้า</a>' +
+        '<a href="/account/">เติมเงิน</a>' +
+        '<a href="/account/?tab=orders">ประวัติการสั่งซื้อ</a>' +
+        '<a href="/status/">สถานะ</a>';
+      linksBox.dataset.rebuilt = "1";
     }
 
-     
     var curCleanPath = location.pathname.replace(/\/+$/, "") || "/";
     var isOrdersView = curCleanPath === "/account" && new URLSearchParams(location.search).get("tab") === "orders";
     linksBox.querySelectorAll("a").forEach(function (a) {
-      var href = (a.getAttribute("href") || "").replace(/\/+$/, "") || "/";
+      var rawHref = a.getAttribute("href") || "";
+      var href = rawHref.split("?")[0].replace(/\/+$/, "") || "/";
+      var isOrdHref = rawHref.indexOf("tab=orders") !== -1;
       if (a.dataset.iconized !== "1") {
         var label = a.textContent.trim();
-        if (href === "/" && label === "หน้าแรก") label = "หน้าหลัก";
-        if (href === "/products" && label === "สินค้า") label = "ร้านค้า";
-        var svg = NAV_ICONS[href] || "";
+        var iconKey = isOrdHref ? "/orders" : href;
+        var svg = NAV_ICONS[iconKey] || "";
         a.innerHTML = svg + "<span>" + escHtml(label) + "</span>";
         a.dataset.iconized = "1";
       }
-      if (href === "/account") {
+      if (isOrdHref) {
+        a.classList.toggle("on", isOrdersView);
+      } else if (href === "/account") {
         a.classList.toggle("on", curCleanPath === "/account" && !isOrdersView);
       } else {
         a.classList.toggle("on", href === curCleanPath);
       }
     });
 
-     
-    var foot = document.querySelector("footer.xn-foot");
-    if (foot && !foot.querySelector(".xn-foot-inner")) {
-      foot.innerHTML =
-        '<div class="xn-foot-inner">' +
-          '<div class="xn-foot-left">' +
-            '<span>© 2026 XENARY. All rights reserved.</span>' +
-            '<span>&middot;</span>' +
-            '<span>Made with <span class="xn-foot-heart">&#10084;</span> by XENARY</span>' +
-          '</div>' +
-          '<div class="xn-foot-studio">' +
-            '<span>สนใจเปิดเว็บติดต่อ <a href="/contact/">XENARY - Studio</a></span>' +
-          '</div>' +
-        '</div>';
-    }
+    renderMarquee((window.__xn_summary_cache && window.__xn_summary_cache.marquee_text) || DEFAULT_MARQUEE);
+    renderReferenceFooter(window.__xn_summary_cache || null);
   }
 
   function render(user) {
@@ -297,6 +371,11 @@ function initStatusTile() {
     var box = document.getElementById("xn-user");
     if (!box) return;
     box.innerHTML = "";
+
+    var contactBtn = el("a", { href: "/contact/", class: "xn-icon-btn", title: "ติดต่อร้านค้า", "aria-label": "ติดต่อร้านค้า" });
+    contactBtn.innerHTML = NAV_ICONS["/contact"];
+    box.appendChild(contactBtn);
+
     if (!user) {
       var loginA = el("a", { href: "/login/", class: "xn-login-btn" });
       loginA.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/></svg><span>เข้าสู่ระบบ</span>';
@@ -312,12 +391,8 @@ function initStatusTile() {
       userLink.innerHTML =
         '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' +
         '<span>' + escHtml(user.username || "") + '</span>' +
-        '<span class="xn-user-bal">฿' + Number(user.balance || 0).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + '</span>';
+        '<span class="xn-user-bal" style="background:rgba(37,99,235,0.16);border-color:rgba(59,130,246,0.35);color:#60a5fa;">฿' + Number(user.balance || 0).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + '</span>';
       box.appendChild(userLink);
-
-      var isOrdersTab = location.pathname.startsWith("/account") && new URLSearchParams(location.search).get("tab") === "orders";
-      var ordBtn = el("a", { href: "/account/?tab=orders", class: "xn-ord-hist-btn" + (isOrdersTab ? " on" : "") }, "ประวัติการสั่งซื้อ");
-      box.appendChild(ordBtn);
 
       var b = el("button", { type: "button", class: "xn-out xn-out-icon", title: "ออกจากระบบ", "aria-label": "ออกจากระบบ" });
       b.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>';
@@ -402,13 +477,91 @@ function initStatusTile() {
     }
   }
 
+  function formatToastAgo(iso) {
+    var ts = new Date(iso).getTime();
+    if (!Number.isFinite(ts)) return "เมื่อสักครู่";
+    var mins = Math.max(1, Math.floor((Date.now() - ts) / 60000));
+    if (mins < 60) return "เมื่อ " + mins + " นาทีที่แล้ว";
+    var hrs = Math.floor(mins / 60);
+    if (hrs < 24) return "เมื่อ " + hrs + " ชม. ที่แล้ว";
+    return "เมื่อ " + Math.floor(hrs / 24) + " วันที่แล้ว";
+  }
+
+  function initLiveToast(orders) {
+    if (location.pathname.indexOf("/admin") === 0) return;
+    if (sessionStorage.getItem("xn_toast_closed") === "1") return;
+    if (!Array.isArray(orders) || !orders.length) return;
+
+    var toast = document.getElementById("xn-live-toast");
+    if (!toast) {
+      toast = document.createElement("aside");
+      toast.id = "xn-live-toast";
+      toast.className = "xn-live-toast";
+      toast.setAttribute("aria-live", "polite");
+      document.body.appendChild(toast);
+    }
+
+    var idx = 0;
+    function showItem(i) {
+      if (sessionStorage.getItem("xn_toast_closed") === "1") return;
+      var o = orders[i % orders.length];
+      var safeImg = /^(https?:\/\/|\/(?!\/))/i.test(String(o.img || "")) ? o.img : "/assets/img/logo.png";
+      toast.innerHTML =
+        '<img src="' + escHtml(safeImg) + '" alt="" class="xn-live-toast-img">' +
+        '<div class="xn-live-toast-body">' +
+          '<div class="xn-live-toast-top"><span class="xn-live-toast-dot"></span><span>คุณ <b>' + escHtml(o.buyer || "XEN****") + '</b> เพิ่งสั่งซื้อ</span></div>' +
+          '<div class="xn-live-toast-title">' + escHtml(o.name || "สินค้าดิจิทัล") + (o.plan ? " (" + escHtml(o.plan) + ")" : "") + '</div>' +
+          '<div class="xn-live-toast-meta"><span>' + escHtml(formatToastAgo(o.createdAt)) + '</span><span class="ok">&#10003; ยืนยันแล้ว</span></div>' +
+        '</div>' +
+        '<button type="button" class="xn-live-toast-close" aria-label="ปิดการแจ้งเตือน">&times;</button>';
+
+      toast.querySelector(".xn-live-toast-close").addEventListener("click", function () {
+        sessionStorage.setItem("xn_toast_closed", "1");
+        toast.classList.add("is-hidden");
+      });
+    }
+
+    showItem(idx);
+    if (window.__xn_toast_timer) clearInterval(window.__xn_toast_timer);
+    if (orders.length > 1) {
+      window.__xn_toast_timer = setInterval(function () {
+        if (sessionStorage.getItem("xn_toast_closed") === "1") {
+          clearInterval(window.__xn_toast_timer);
+          return;
+        }
+        idx = (idx + 1) % orders.length;
+        showItem(idx);
+      }, 9000);
+    }
+  }
+
+  function hydrateSummaryGlobals() {
+    fetch("/api/summary", { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d) return;
+        window.__xn_summary_cache = d;
+        window.__xn_particles_enabled = d.particles_enabled !== false;
+        renderMarquee(d.marquee_text || DEFAULT_MARQUEE);
+        renderReferenceFooter(d);
+        initLiveToast(d.recentOrders || []);
+      })
+      .catch(function () {});
+  }
+
+  hydrateSummaryGlobals();
+
   function updateNavLinks(pathname) {
     var cleanPath = pathname.replace(/\/+$/, "") || "/";
     var isOrdersView = cleanPath === "/account" && new URLSearchParams(location.search).get("tab") === "orders";
     document.querySelectorAll(".xn-links a").forEach(function (a) {
       if (a.classList.contains("xn-pill") || a.classList.contains("xn-adm-pill") || a.classList.contains("cta")) return;
-      var aPath = (a.getAttribute("href") || "").replace(/\/+$/, "") || "/";
-      if (aPath === "/account") {
+      var rawHref = a.getAttribute("href") || "";
+      var aPath = rawHref.split("?")[0].replace(/\/+$/, "") || "/";
+      var isOrdHref = rawHref.indexOf("tab=orders") !== -1;
+      if (isOrdHref) {
+        a.classList.toggle("on", isOrdersView);
+      } else if (aPath === "/account") {
         a.classList.toggle("on", cleanPath === "/account" && !isOrdersView);
       } else {
         a.classList.toggle("on", aPath === cleanPath);
@@ -550,6 +703,8 @@ function initStatusTile() {
    
   (function initFloatingBrandCanvas() {
     if (document.getElementById("xn-bg-canvas")) return;
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
     var canvas = document.createElement("canvas");
     canvas.id = "xn-bg-canvas";
     canvas.setAttribute("aria-hidden", "true");
@@ -561,7 +716,6 @@ function initStatusTile() {
     var w = 0;
     var h = 0;
     var dpr = Math.min(window.devicePixelRatio || 1, 2);
-    var mouse = { x: -9999, y: -9999, cx: 0, cy: 0 };
 
     function resize() {
       w = window.innerWidth || document.documentElement.clientWidth || 1280;
@@ -569,105 +723,71 @@ function initStatusTile() {
       canvas.width = Math.floor(w * dpr);
       canvas.height = Math.floor(h * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      if (!mouse.cx && !mouse.cy) {
-        mouse.cx = w * 0.5;
-        mouse.cy = h * 0.5;
-      }
     }
     resize();
     window.addEventListener("resize", resize, { passive: true });
-    window.addEventListener("mousemove", function (e) {
-      mouse.x = e.clientX;
-      mouse.y = e.clientY;
-    }, { passive: true });
 
-    var logoImg = new Image();
-    var logoLoaded = false;
-    logoImg.onload = function () { logoLoaded = true; };
-    logoImg.src = "/assets/img/float-logo.png";
-
-    var count = Math.min(26, Math.max(16, Math.floor((window.innerWidth || 1280) / 75)));
-    var items = [];
+    var count = Math.min(28, Math.max(14, Math.floor((window.innerWidth || 1280) / 68)));
+    var flakes = [];
     for (var i = 0; i < count; i++) {
       var depth = 0.35 + Math.random() * 0.65;
-      items.push({
+      flakes.push({
         x: Math.random() * (w || 1280),
         y: Math.random() * (h || 800),
-        size: Math.round(30 + depth * 46),
-        vx: (Math.random() - 0.5) * 0.42 * depth,
-        vy: (-0.2 - Math.random() * 0.4) * depth,
-        swayAmp: 0.35 + Math.random() * 0.65,
-        swayFreq: 0.007 + Math.random() * 0.012,
+        r: Math.round(5 + depth * 6),
+        vy: (0.28 + Math.random() * 0.45) * depth,
+        swayAmp: 0.25 + Math.random() * 0.4,
+        swayFreq: 0.008 + Math.random() * 0.01,
         phase: Math.random() * Math.PI * 2,
-        angle: (Math.random() - 0.5) * Math.PI,
-        vAngle: (Math.random() - 0.5) * 0.006,
-        alpha: 0.08 + depth * 0.16,
-        depth: depth
+        angle: Math.random() * Math.PI,
+        vAngle: (Math.random() - 0.5) * 0.01,
+        alpha: 0.14 + depth * 0.2,
       });
+    }
+
+    function drawSnowflake(cx, cy, r) {
+      for (var arm = 0; arm < 3; arm++) {
+        var a = (arm * Math.PI) / 3;
+        var dx = Math.cos(a) * r;
+        var dy = Math.sin(a) * r;
+        ctx.beginPath();
+        ctx.moveTo(cx - dx, cy - dy);
+        ctx.lineTo(cx + dx, cy + dy);
+        ctx.stroke();
+      }
     }
 
     var tick = 0;
     function render() {
-      if (document.hidden) {
+      if (document.hidden || window.__xn_particles_enabled === false || location.pathname.indexOf("/admin") === 0) {
+        ctx.clearRect(0, 0, w, h);
         requestAnimationFrame(render);
         return;
       }
       tick += 1;
       ctx.clearRect(0, 0, w, h);
+      ctx.strokeStyle = "rgba(219, 234, 254, 0.9)";
+      ctx.lineWidth = 1.1;
+      ctx.lineCap = "round";
 
-      if (mouse.x > 0 && mouse.y > 0) {
-        mouse.cx += (mouse.x - mouse.cx) * 0.06;
-        mouse.cy += (mouse.y - mouse.cy) * 0.06;
-      } else {
-        mouse.cx = w * 0.5 + Math.sin(tick * 0.01) * 100;
-        mouse.cy = h * 0.4 + Math.cos(tick * 0.008) * 70;
-      }
+      for (var i = 0; i < flakes.length; i++) {
+        var f = flakes[i];
+        f.y += f.vy;
+        f.x += Math.sin(tick * f.swayFreq + f.phase) * f.swayAmp;
+        f.angle += f.vAngle;
 
-      var parX = ((mouse.cx / (w || 1)) - 0.5) * 24;
-      var parY = ((mouse.cy / (h || 1)) - 0.5) * 24;
-
-      for (var i = 0; i < items.length; i++) {
-        var it = items[i];
-        it.x += it.vx + Math.sin(tick * it.swayFreq + it.phase) * it.swayAmp;
-        it.y += it.vy + Math.cos(tick * it.swayFreq * 0.8 + it.phase) * 0.18;
-        it.angle += it.vAngle;
-
-        if (mouse.x > 0 && mouse.y > 0) {
-          var dx = it.x - mouse.x;
-          var dy = it.y - mouse.y;
-          var dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 160 && dist > 1) {
-            var push = (1 - dist / 160) * 1.4;
-            it.x += (dx / dist) * push;
-            it.y += (dy / dist) * push;
-          }
+        if (f.y > h + 20) {
+          f.y = -20;
+          f.x = Math.random() * w;
         }
-
-        var pad = it.size + 30;
-        if (it.y < -pad) {
-          it.y = h + pad;
-          it.x = Math.random() * w;
-        } else if (it.y > h + pad) {
-          it.y = -pad;
-        }
-        if (it.x < -pad) it.x = w + pad;
-        if (it.x > w + pad) it.x = -pad;
-
-        var drawX = it.x + parX * it.depth * 0.5;
-        var drawY = it.y + parY * it.depth * 0.5;
-        var pulseAlpha = it.alpha * (0.85 + 0.15 * Math.sin(tick * 0.02 + it.phase));
+        if (f.x < -20) f.x = w + 20;
+        if (f.x > w + 20) f.x = -20;
 
         ctx.save();
-        ctx.translate(drawX, drawY);
-        ctx.rotate(it.angle);
-        ctx.globalAlpha = pulseAlpha;
-
-        if (logoLoaded) {
-          var half = it.size * 0.5;
-          ctx.shadowColor = "rgba(255, 255, 255, 0.45)";
-          ctx.shadowBlur = 12 * it.depth;
-          ctx.drawImage(logoImg, -half, -half, it.size, it.size);
-        }
+        ctx.translate(f.x, f.y);
+        ctx.rotate(f.angle);
+        ctx.globalAlpha = f.alpha;
+        drawSnowflake(0, 0, f.r);
         ctx.restore();
       }
 
@@ -679,6 +799,7 @@ function initStatusTile() {
 
    
   (function initMiniMusicPlayer() {
+    if (location.pathname.indexOf("/admin") === 0) return;
     if (document.getElementById("xn-music-widget")) return;
 
     var VIDEO_ID = "DeVDKGxyDY4";
@@ -790,7 +911,8 @@ function initStatusTile() {
     var currentVol = Number.isFinite(rawVol) ? Math.max(0, Math.min(100, rawVol)) : 40;
     var rawTime = parseFloat(localStorage.getItem("xn_yt_time") || "0");
     var savedTime = Number.isFinite(rawTime) && rawTime >= 0 ? rawTime : 0;
-    var shouldAutoPlay = localStorage.getItem("xn_yt_playing") !== "false";
+    var shouldAutoPlay = localStorage.getItem("xn_yt_playing") === "true";
+    var ytScriptLoaded = false;
     var timeInterval = null;
 
     btnLoop.classList.add("active");
@@ -850,19 +972,45 @@ function initStatusTile() {
       }, 500);
     }
 
-     
+    var pendingPlayAfterLoad = false;
+    function ensureYouTubePlayer(autoStart) {
+      if (autoStart) pendingPlayAfterLoad = true;
+      if (player) {
+        if (autoStart && typeof player.playVideo === "function") player.playVideo();
+        return;
+      }
+      if (window.YT && window.YT.Player) {
+        setupPlayer();
+        return;
+      }
+      if (!ytScriptLoaded) {
+        ytScriptLoaded = true;
+        var tag = document.createElement("script");
+        tag.src = "https://www.youtube.com/iframe_api";
+        var firstScript = document.getElementsByTagName("script")[0];
+        if (firstScript && firstScript.parentNode) {
+          firstScript.parentNode.insertBefore(tag, firstScript);
+        } else {
+          document.head.appendChild(tag);
+        }
+        window.onYouTubeIframeAPIReady = function () {
+          setupPlayer();
+        };
+      }
+    }
+
     btnTrigger.addEventListener("click", function () {
       var isOpen = cardPopup.classList.toggle("open");
       wrap.classList.toggle("open", isOpen);
+      if (isOpen) ensureYouTubePlayer(false);
     });
     btnClose.addEventListener("click", function () {
       cardPopup.classList.remove("open");
       wrap.classList.remove("open");
     });
 
-     
     function setupPlayer() {
-      if (!window.YT || !window.YT.Player) return;
+      if (player || !window.YT || !window.YT.Player) return;
       player = new window.YT.Player("xn-yt-player-target", {
         height: "100",
         width: "100",
@@ -885,22 +1033,10 @@ function initStatusTile() {
             }
             startTimeSync();
 
-            if (shouldAutoPlay) {
+            if (shouldAutoPlay || pendingPlayAfterLoad) {
+              pendingPlayAfterLoad = false;
               player.playVideo();
             }
-
-             
-            var startTrigger = function () {
-              if (player && typeof player.playVideo === "function" && !isPlaying) {
-                player.playVideo();
-              }
-              window.removeEventListener("click", startTrigger);
-              window.removeEventListener("keydown", startTrigger);
-              window.removeEventListener("touchstart", startTrigger);
-            };
-            window.addEventListener("click", startTrigger, { once: true });
-            window.addEventListener("keydown", startTrigger, { once: true });
-            window.addEventListener("touchstart", startTrigger, { once: true });
           },
           onStateChange: function (event) {
             if (event.data === 1) {
@@ -919,26 +1055,15 @@ function initStatusTile() {
       });
     }
 
-     
-    if (!window.YT) {
-      var tag = document.createElement("script");
-      tag.src = "https://www.youtube.com/iframe_api";
-      var firstScript = document.getElementsByTagName("script")[0];
-      if (firstScript && firstScript.parentNode) {
-        firstScript.parentNode.insertBefore(tag, firstScript);
-      } else {
-        document.head.appendChild(tag);
-      }
-      window.onYouTubeIframeAPIReady = function () {
-        setupPlayer();
-      };
-    } else {
-      setupPlayer();
+    if (shouldAutoPlay) {
+      ensureYouTubePlayer(true);
     }
 
-     
     btnPlay.addEventListener("click", function () {
-      if (!player || typeof player.playVideo !== "function") return;
+      if (!player || typeof player.playVideo !== "function") {
+        ensureYouTubePlayer(true);
+        return;
+      }
       if (isPlaying) {
         player.pauseVideo();
       } else {

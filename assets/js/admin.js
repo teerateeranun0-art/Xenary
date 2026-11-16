@@ -7,6 +7,9 @@
   var cachedOrders = [];
   var cachedUsers = [];
   var balanceModalMode = "add";
+  var analyticsRange = "7d";
+  var analyticsMetric = "rev";
+  var cachedAnalytics = null;
 
   function $(id) { return document.getElementById(id); }
   function on(id, ev, fn) {
@@ -32,9 +35,12 @@
   }
 
   function esc(v) {
-    return String(v == null ? "" : v).replace(/[&<>"']/g, function (c) {
+    return String(valueOrEmpty(v)).replace(/[&<>"']/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
+  }
+  function valueOrEmpty(v) {
+    return v == null ? "" : v;
   }
 
   function safeUrl(rawUrl, allowMailTel) {
@@ -78,6 +84,14 @@
     return data;
   }
 
+  function syncSidebarAdminUser(username) {
+    var uname = String(username || "Admin").trim() || "Admin";
+    var uEl = $("adm-side-uname");
+    var avEl = document.querySelector("#adm-side-user .adm-side-avatar");
+    if (uEl) uEl.textContent = uname;
+    if (avEl) avEl.textContent = uname.charAt(0).toUpperCase();
+  }
+
   // --- Auth / Lock Screen ---
   async function checkAuth() {
     var key = getKey();
@@ -86,6 +100,7 @@
         await api("/api/admin/stats");
         $("adm-login-card").hidden = true;
         $("adm-main-panel").hidden = false;
+        syncSidebarAdminUser("Admin Key");
         return true;
       } catch (e) {
         if (e.status === 403 || e.status === 401) {
@@ -98,6 +113,7 @@
       if (me.user && me.user.role === "admin") {
         $("adm-login-card").hidden = true;
         $("adm-main-panel").hidden = false;
+        syncSidebarAdminUser(me.user.username);
         return true;
       }
     } catch (e) {}
@@ -107,65 +123,85 @@
     return false;
   }
 
-  // --- TAB NAVIGATION & SCROLL CONTROLS ---
+  // --- SIDEBAR NAVIGATION, SEARCH FILTER & ANALYTICS CONTROLS ---
   function initTabs() {
     var btns = document.querySelectorAll(".adm-nav-btn");
     btns.forEach(function (btn) {
       btn.addEventListener("click", function () {
         var tab = btn.dataset.tab;
         switchTab(tab);
-        btn.scrollIntoView({ inline: "nearest", behavior: "smooth", block: "nearest" });
+        var sb = $("adm-sidebar");
+        if (sb) sb.classList.remove("is-open");
       });
     });
 
-    var navBar = $("adm-nav-bar");
-    var btnLeft = $("adm-scroll-left");
-    var btnRight = $("adm-scroll-right");
+    on("adm-sidebar-toggle", "click", function () {
+      var sb = $("adm-sidebar");
+      if (sb) sb.classList.toggle("is-open");
+    });
+    on("adm-side-close", "click", function () {
+      var sb = $("adm-sidebar");
+      if (sb) sb.classList.remove("is-open");
+    });
 
-    function updateScrollState() {
-      if (!navBar || !btnLeft || !btnRight) return;
-      var max = navBar.scrollWidth - navBar.clientWidth;
-      btnLeft.classList.toggle("disabled", navBar.scrollLeft <= 5);
-      btnRight.classList.toggle("disabled", navBar.scrollLeft >= max - 5);
-    }
-
-    if (btnLeft && navBar) {
-      btnLeft.addEventListener("click", function () {
-        navBar.scrollBy({ left: -260, behavior: "smooth" });
-        setTimeout(updateScrollState, 250);
+    var navSearch = $("adm-nav-search");
+    if (navSearch) {
+      navSearch.addEventListener("input", function () {
+        var q = navSearch.value.trim().toLowerCase();
+        document.querySelectorAll(".adm-side-group").forEach(function (grp) {
+          var visibleCount = 0;
+          grp.querySelectorAll(".adm-nav-btn").forEach(function (b) {
+            var match = !q || b.textContent.toLowerCase().indexOf(q) !== -1 || String(b.dataset.tab || "").toLowerCase().indexOf(q) !== -1;
+            b.style.display = match ? "" : "none";
+            if (match) visibleCount++;
+          });
+          grp.style.display = visibleCount > 0 ? "" : "none";
+        });
       });
-    }
-    if (btnRight && navBar) {
-      btnRight.addEventListener("click", function () {
-        navBar.scrollBy({ left: 260, behavior: "smooth" });
-        setTimeout(updateScrollState, 250);
-      });
-    }
-    if (navBar) {
-      navBar.addEventListener("scroll", updateScrollState, { passive: true });
-      navBar.addEventListener("wheel", function (e) {
-        if (e.deltaY !== 0 && Math.abs(e.deltaX) < 5) {
-          e.preventDefault();
-          navBar.scrollLeft += e.deltaY;
-          updateScrollState();
-        }
-      }, { passive: false });
-      window.addEventListener("resize", updateScrollState);
-      setTimeout(updateScrollState, 100);
     }
 
     on("dash-go-keys", "click", function () { switchTab("keys"); });
     on("dash-go-orders", "click", function () { switchTab("orders"); });
+
+    ["7d", "30d", "12m"].forEach(function (rng) {
+      on("adm-range-" + rng, "click", function () {
+        analyticsRange = rng;
+        document.querySelectorAll("[data-range]").forEach(function (b) {
+          b.classList.toggle("active", b.dataset.range === rng);
+        });
+        renderAnalyticsChart();
+      });
+    });
+    ["rev", "ord"].forEach(function (met) {
+      on("adm-metric-" + met, "click", function () {
+        analyticsMetric = met;
+        document.querySelectorAll("[data-metric]").forEach(function (b) {
+          b.classList.toggle("active", b.dataset.metric === met);
+        });
+        renderAnalyticsChart();
+      });
+    });
   }
 
   function switchTab(tab) {
     currentTab = tab;
+    var activeBtn = null;
     document.querySelectorAll(".adm-nav-btn").forEach(function (b) {
-      b.classList.toggle("active", b.dataset.tab === tab);
+      var isOn = b.dataset.tab === tab;
+      b.classList.toggle("active", isOn);
+      if (isOn) activeBtn = b;
     });
     document.querySelectorAll(".adm-tab-pane").forEach(function (p) {
       p.hidden = p.id !== "pane-" + tab;
     });
+
+    var crumb = $("adm-topbar-crumb");
+    if (crumb && activeBtn) {
+      var grp = activeBtn.dataset.group || "Admin";
+      var labelSpan = activeBtn.querySelector("span");
+      var lbl = labelSpan ? labelSpan.textContent.trim() : tab;
+      crumb.innerHTML = esc(grp) + " / <b>" + esc(lbl) + "</b>";
+    }
 
     if (tab === "dashboard") loadStats();
     else if (tab === "products") loadProducts();
@@ -180,8 +216,176 @@
   }
 
   // ================================================================
-  // 1. DASHBOARD STATS & QUICK OVERVIEW
+  // 1. DASHBOARD STATS, ANALYTICS CHARTS & QUICK OVERVIEW
   // ================================================================
+  function renderAnalyticsChart() {
+    var chartBox = $("adm-analytics-chart");
+    var legBox = $("adm-chart-legend");
+    if (!chartBox || !cachedAnalytics) return;
+
+    var series = analyticsRange === "30d"
+      ? (cachedAnalytics.daily30 || [])
+      : (analyticsRange === "12m" ? (cachedAnalytics.monthly12 || []) : (cachedAnalytics.daily7 || []));
+
+    if (!series.length) {
+      chartBox.innerHTML = '<div class="adm-empty">ยังไม่มีข้อมูลในช่วงเวลาที่เลือก</div>';
+      return;
+    }
+
+    var isRev = analyticsMetric === "rev";
+    var k1 = isRev ? "revenue" : "ordersCount";
+    var k2 = isRev ? "topup" : "newUsers";
+    var lbl1 = isRev ? "รายได้คำสั่งซื้อ (฿)" : "จำนวนออเดอร์ (รายการ)";
+    var lbl2 = isRev ? "ยอดเติมเงินอนุมัติ (฿)" : "สมาชิกใหม่ (คน)";
+    var col1 = "#3b82f6";
+    var col2 = "#10b981";
+
+    if (legBox) {
+      legBox.innerHTML =
+        '<span><i class="adm-leg-dot" style="background:' + col1 + '"></i>' + esc(lbl1) + '</span>' +
+        '<span><i class="adm-leg-dot" style="background:' + col2 + '"></i>' + esc(lbl2) + '</span>';
+    }
+
+    var W = 720, H = 210, PL = 46, PR = 18, PT = 16, PB = 28;
+    var plotW = W - PL - PR;
+    var plotH = H - PT - PB;
+    var maxVal = 1;
+    series.forEach(function (pt) {
+      maxVal = Math.max(maxVal, Number(pt[k1]) || 0, Number(pt[k2]) || 0);
+    });
+    maxVal = Math.ceil(maxVal * 1.15);
+
+    var n = series.length;
+    var stepX = n > 1 ? plotW / (n - 1) : plotW;
+    var gridLines = "";
+    for (var g = 0; g <= 4; g++) {
+      var gy = PT + (plotH * g) / 4;
+      var gv = Math.round(maxVal * (1 - g / 4));
+      gridLines += '<line x1="' + PL + '" y1="' + gy.toFixed(1) + '" x2="' + (W - PR) + '" y2="' + gy.toFixed(1) + '" stroke="rgba(255,255,255,0.06)" stroke-dasharray="3 3"/>';
+      gridLines += '<text x="' + (PL - 6) + '" y="' + (gy + 4).toFixed(1) + '" fill="#71717a" font-size="10" text-anchor="end">' + gv.toLocaleString("en-US") + '</text>';
+    }
+
+    var pts1 = [], pts2 = [], barsAndDots = "", xLabels = "";
+    var labelEvery = n > 14 ? Math.ceil(n / 7) : 1;
+
+    series.forEach(function (pt, i) {
+      var x = n > 1 ? (PL + i * stepX) : (PL + plotW / 2);
+      var v1 = Number(pt[k1]) || 0;
+      var v2 = Number(pt[k2]) || 0;
+      var y1 = PT + plotH - (v1 / maxVal) * plotH;
+      var y2 = PT + plotH - (v2 / maxVal) * plotH;
+      pts1.push(x.toFixed(1) + "," + y1.toFixed(1));
+      pts2.push(x.toFixed(1) + "," + y2.toFixed(1));
+
+      var barW = Math.max(4, Math.min(18, (plotW / n) * 0.42));
+      var bh2 = Math.max(0, PT + plotH - y2);
+      barsAndDots += '<rect x="' + (x - barW / 2).toFixed(1) + '" y="' + y2.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + bh2.toFixed(1) + '" rx="3" fill="rgba(16,185,129,0.22)"><title>' + esc(pt.label) + " — " + esc(lbl2) + ": " + v2 + '</title></rect>';
+      barsAndDots += '<circle cx="' + x.toFixed(1) + '" cy="' + y1.toFixed(1) + '" r="3.6" fill="' + col1 + '" stroke="#0d0d11" stroke-width="1.5"><title>' + esc(pt.label) + " — " + esc(lbl1) + ": " + v1 + '</title></circle>';
+
+      if (i % labelEvery === 0 || i === n - 1) {
+        xLabels += '<text x="' + x.toFixed(1) + '" y="' + (H - 6) + '" fill="#71717a" font-size="10" text-anchor="middle">' + esc(pt.label) + '</text>';
+      }
+    });
+
+    var area1 = pts1.length > 1
+      ? '<polygon points="' + PL.toFixed(1) + ',' + (PT + plotH).toFixed(1) + ' ' + pts1.join(" ") + ' ' + (PL + (n - 1) * stepX).toFixed(1) + ',' + (PT + plotH).toFixed(1) + '" fill="url(#admGradBlue)"/>'
+      : "";
+    var line1 = pts1.length > 1
+      ? '<polyline fill="none" stroke="' + col1 + '" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" points="' + pts1.join(" ") + '"/>'
+      : "";
+
+    chartBox.innerHTML =
+      '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block;overflow:visible;">' +
+        '<defs><linearGradient id="admGradBlue" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#3b82f6" stop-opacity="0.28"/><stop offset="100%" stop-color="#3b82f6" stop-opacity="0.01"/></linearGradient></defs>' +
+        gridLines + area1 + barsAndDots + line1 + xLabels +
+      '</svg>';
+  }
+
+  function renderAnalyticsBreakdowns(data) {
+    var catBox = $("adm-cat-share");
+    if (catBox) {
+      var cats = data.revenueByCategory || [];
+      if (!cats.length) {
+        catBox.innerHTML = '<div class="adm-empty" style="padding:14px;">ยังไม่มีรายได้ตามหมวดหมู่</div>';
+      } else {
+        catBox.innerHTML = cats.slice(0, 5).map(function (c) {
+          return '<div class="adm-prog-row">' +
+            '<div class="adm-prog-head"><span>' + esc(c.tag) + ' (' + c.orders + ' ออเดอร์)</span><b>' + money(c.revenue) + ' (' + c.sharePct + '%)</b></div>' +
+            '<div class="adm-prog-track"><div class="adm-prog-fill" style="width:' + Math.max(3, Math.min(100, c.sharePct)) + '%"></div></div>' +
+          '</div>';
+        }).join("");
+      }
+    }
+
+    var hrBox = $("adm-hourly-24");
+    if (hrBox) {
+      var hrs = data.hourly24 || [];
+      var maxHr = Math.max.apply(null, hrs.map(function (h) { return h.orders || 0; }).concat([1]));
+      hrBox.innerHTML = hrs.map(function (h) {
+        var pct = Math.max(5, Math.round(((h.orders || 0) / maxHr) * 100));
+        return '<div class="adm-hr-bar" style="height:' + pct + '%" title="' + esc(h.label) + ': ' + (h.orders || 0) + ' ออเดอร์ (' + money(h.revenue || 0) + ')"></div>';
+      }).join("");
+    }
+
+    var chBox = $("adm-topup-channels");
+    if (chBox) {
+      var chs = data.topupMethods || [];
+      chBox.innerHTML = chs.map(function (ch) {
+        return '<div class="adm-prog-row">' +
+          '<div class="adm-prog-head"><span>' + esc(ch.label) + ' (' + ch.count + ' ครั้ง)</span><b>' + money(ch.amount) + ' (' + ch.sharePct + '%)</b></div>' +
+          '<div class="adm-prog-track"><div class="adm-prog-fill" style="width:' + Math.max(2, Math.min(100, ch.sharePct)) + '%;background:linear-gradient(90deg,#10b981,#34d399)"></div></div>' +
+        '</div>';
+      }).join("");
+    }
+
+    var lowBox = $("adm-low-stock");
+    if (lowBox) {
+      var lows = data.lowStockProducts || [];
+      if (!lows.length) {
+        lowBox.innerHTML = '<div style="font-size:12px;color:#34d399;">สินค้าทุกชิ้นมีสต็อกเพียงพอ (&gt; 5 ชิ้น)</div>';
+      } else {
+        lowBox.innerHTML = "";
+        lows.slice(0, 5).forEach(function (lp) {
+          var row = document.createElement("div");
+          row.style.cssText = "display:flex;justify-content:space-between;align-items:center;font-size:12.5px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.05);";
+          row.innerHTML =
+            '<span style="color:#f4f4f5">' + esc(lp.name) + ' <small style="color:' + (lp.stock === 0 ? "#f87171" : "#fbbf24") + '">(เหลือ ' + lp.stock + ')</small></span>' +
+            '<button type="button" class="adm-btn sm ok" style="padding:3px 9px;font-size:11px;">+ เติมคีย์</button>';
+          row.querySelector("button").addEventListener("click", function () {
+            jumpToProductKeys(lp.slug, "", true);
+          });
+          lowBox.appendChild(row);
+        });
+      }
+    }
+
+    var spBox = $("adm-top-spenders");
+    if (spBox) {
+      var sp = data.topSpenders || [];
+      if (!sp.length) {
+        spBox.innerHTML = '<div style="font-size:12px;color:#71717a;">ยังไม่มีข้อมูลคำสั่งซื้อ</div>';
+      } else {
+        spBox.innerHTML = sp.slice(0, 4).map(function (u) {
+          return '<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0;">' +
+            '<span style="color:#d4d4d8">' + esc(u.username) + ' <small style="color:#71717a">(' + u.orders + ' ออเดอร์)</small></span>' +
+            '<b style="color:#60a5fa">' + money(u.spent) + '</b>' +
+          '</div>';
+        }).join("");
+      }
+    }
+  }
+
+  async function loadAnalytics() {
+    try {
+      cachedAnalytics = await api("/api/admin/analytics");
+      renderAnalyticsChart();
+      renderAnalyticsBreakdowns(cachedAnalytics);
+    } catch (e) {
+      var cb = $("adm-analytics-chart");
+      if (cb) cb.innerHTML = '<div class="adm-error">โหลดกราฟสถิติไม่สำเร็จ</div>';
+    }
+  }
+
   async function loadStats() {
     try {
       var st = await api("/api/admin/stats");
@@ -195,6 +399,8 @@
     } catch (e) {
       console.warn("Stats load error:", e);
     }
+
+    loadAnalytics();
 
     // Load product stock breakdown & recent orders on dashboard
     var stockBox = $("dash-product-stock");
@@ -1578,17 +1784,37 @@
   }
 
   // ================================================================
-  // 7. COUPONS (Create + Edit + Toggle + Delete)
+  // 7. COUPONS (Discount & Credit Create + Edit + Toggle + Delete)
   // ================================================================
+  function syncCouponTypeUi() {
+    var cpType = $("cp-type") ? $("cp-type").value : "discount";
+    var dtWrap = $("cp-discount-type-wrap");
+    var amtLbl = $("cp-amount-label");
+    if (dtWrap) dtWrap.hidden = cpType !== "discount";
+    if (amtLbl && amtLbl.childNodes[0]) {
+      var dType = $("cp-discount-type") ? $("cp-discount-type").value : "fixed";
+      amtLbl.childNodes[0].nodeValue = cpType === "credit"
+        ? "มูลค่าเครดิตที่ได้รับ (บาท) "
+        : (dType === "percent" ? "ส่วนลด (%) " : "มูลค่าส่วนลด (บาท) ");
+    }
+  }
+  on("cp-type", "change", syncCouponTypeUi);
+  on("cp-discount-type", "change", syncCouponTypeUi);
+
   function resetCouponForm() {
     $("cp-edit-id").value = "";
-    $("cp-form-title").textContent = "สร้างโค้ดคูปองเครดิตใหม่";
+    $("cp-form-title").textContent = "สร้างโค้ดคูปอง / โค้ดส่วนลดใหม่";
     $("btn-submit-cp").textContent = "สร้างคูปอง";
     $("btn-cancel-edit-cp").hidden = true;
+    if ($("cp-type")) $("cp-type").value = "discount";
+    if ($("cp-discount-type")) $("cp-discount-type").value = "fixed";
     $("cp-code").value = "";
     $("cp-amount").value = "";
+    if ($("cp-min-spend")) $("cp-min-spend").value = "";
+    if ($("cp-expires-at")) $("cp-expires-at").value = "";
     $("cp-max").value = "";
     $("cp-note").value = "";
+    syncCouponTypeUi();
     msg($("msg-coupon"), "");
   }
 
@@ -1608,11 +1834,18 @@
       d.coupons.forEach(function (c) {
         var el = document.createElement("div");
         el.className = "adm-item-card";
+        var isDiscount = c.coupon_type === "discount" || Boolean(c.discount_type);
+        var valText = isDiscount && c.discount_type === "percent"
+          ? (Number(c.amount || 0) + "%")
+          : money(c.amount);
+        var minText = Number(c.min_spend) > 0 ? (" &middot; ขั้นต่ำ: " + money(c.min_spend)) : "";
+        var expText = c.expires_at ? (" &middot; หมดอายุ: " + when(c.expires_at)) : "";
         el.innerHTML =
           '<div class="adm-item-info">' +
             '<code class="adm-key-code">' + esc(c.code) + '</code> ' +
+            '<span class="adm-tag" style="' + (isDiscount ? "background:rgba(37,99,235,0.16);color:#93c5fd;border-color:rgba(59,130,246,0.35);" : "background:rgba(16,185,129,0.14);color:#34d399;border-color:rgba(16,185,129,0.3);") + '">' + (isDiscount ? "โค้ดส่วนลด" : "โค้ดเติมเงิน") + '</span> ' +
             '<span class="adm-badge ' + (c.enabled ? "ok" : "used") + '">' + (c.enabled ? "เปิดใช้งาน" : "ปิดใช้งาน") + '</span>' +
-            '<div class="adm-sub">มูลค่า: <span class="adm-highlight">' + money(c.amount) + '</span> &middot; ใช้แล้ว: ' + (c.used_count || 0) + '/' + (c.max_uses || "ไม่จำกัด") + ' ครั้ง' + (c.note ? " &middot; " + esc(c.note) : "") + '</div>' +
+            '<div class="adm-sub">มูลค่า: <span class="adm-highlight">' + esc(valText) + '</span> &middot; ใช้แล้ว: ' + (c.used_count || 0) + '/' + (c.max_uses || "ไม่จำกัด") + ' ครั้ง' + minText + expText + (c.note ? " &middot; " + esc(c.note) : "") + '</div>' +
           '</div>' +
           '<div class="adm-actions">' +
             '<button type="button" class="adm-btn sm primary" data-act="edit">แก้ไข</button>' +
@@ -1625,10 +1858,17 @@
           $("cp-form-title").textContent = "แก้ไขคูปอง: " + c.code;
           $("btn-submit-cp").textContent = "บันทึกการแก้ไขคูปอง";
           $("btn-cancel-edit-cp").hidden = false;
+          if ($("cp-type")) $("cp-type").value = isDiscount ? "discount" : "credit";
+          if ($("cp-discount-type")) $("cp-discount-type").value = c.discount_type === "percent" ? "percent" : "fixed";
           $("cp-code").value = c.code || "";
           $("cp-amount").value = c.amount || "";
+          if ($("cp-min-spend")) $("cp-min-spend").value = Number(c.min_spend) > 0 ? c.min_spend : "";
+          if ($("cp-expires-at")) {
+            $("cp-expires-at").value = c.expires_at ? new Date(c.expires_at).toISOString().slice(0, 16) : "";
+          }
           $("cp-max").value = c.max_uses != null ? c.max_uses : "";
           $("cp-note").value = c.note || "";
+          syncCouponTypeUi();
           $("coupon-form-card").scrollIntoView({ behavior: "smooth", block: "start" });
         });
         el.querySelector('[data-act="toggle"]').addEventListener("click", async function () {
@@ -1668,24 +1908,39 @@
   on("f-add-coupon", "submit", async function (e) {
     e.preventDefault();
     var editId = $("cp-edit-id").value.trim();
+    var cpType = $("cp-type") ? $("cp-type").value : "discount";
+    var discountType = $("cp-discount-type") ? $("cp-discount-type").value : "fixed";
     var code = $("cp-code").value.trim();
     var amount = Number($("cp-amount").value);
+    var minSpend = $("cp-min-spend") && $("cp-min-spend").value ? Number($("cp-min-spend").value) : 0;
+    var expiresAt = $("cp-expires-at") && $("cp-expires-at").value ? $("cp-expires-at").value : null;
     var max = $("cp-max").value ? Number($("cp-max").value) : null;
     var note = $("cp-note").value.trim();
     var m = $("msg-coupon");
+
+    var payload = {
+      code: code,
+      coupon_type: cpType,
+      discount_type: cpType === "discount" ? discountType : undefined,
+      amount: amount,
+      min_spend: minSpend,
+      expires_at: expiresAt,
+      max_uses: max,
+      note: note,
+    };
 
     try {
       if (editId) {
         await api("/api/admin/coupons/" + encodeURIComponent(editId), {
           method: "PATCH",
-          body: JSON.stringify({ code: code, amount: amount, max_uses: max, note: note }),
+          body: JSON.stringify(payload),
         });
         resetCouponForm();
         msg(m, "อัปเดตคูปอง " + code.toUpperCase() + " สำเร็จ!", true);
       } else {
         await api("/api/admin/coupons", {
           method: "POST",
-          body: JSON.stringify({ code: code, amount: amount, max_uses: max, note: note }),
+          body: JSON.stringify(payload),
         });
         resetCouponForm();
         msg(m, "สร้างคูปอง " + code.toUpperCase() + " สำเร็จ!", true);
@@ -2055,6 +2310,11 @@
       $("set-topup-mode").value = s.topup_mode || "direct";
       $("set-banner-url").value = s.banner_url || "";
       if ($("set-discord-url")) $("set-discord-url").value = s.discord_url || "";
+      if ($("set-youtube-url")) $("set-youtube-url").value = s.youtube_url || "";
+      if ($("set-hero-title")) $("set-hero-title").value = s.hero_title || "";
+      if ($("set-hero-subtitle")) $("set-hero-subtitle").value = s.hero_subtitle || "";
+      if ($("set-marquee-text")) $("set-marquee-text").value = s.marquee_text || "";
+      if ($("set-particles-enabled")) $("set-particles-enabled").checked = s.particles_enabled !== false;
       $("set-maintenance").checked = Boolean(s.maintenance);
     } catch (e) {}
     loadSupportLinks();
@@ -2073,6 +2333,11 @@
           topup_mode: $("set-topup-mode").value,
           banner_url: $("set-banner-url").value.trim(),
           discord_url: $("set-discord-url") ? $("set-discord-url").value.trim() : "",
+          youtube_url: $("set-youtube-url") ? $("set-youtube-url").value.trim() : "",
+          hero_title: $("set-hero-title") ? $("set-hero-title").value.trim() : "",
+          hero_subtitle: $("set-hero-subtitle") ? $("set-hero-subtitle").value.trim() : "",
+          marquee_text: $("set-marquee-text") ? $("set-marquee-text").value.trim() : "",
+          particles_enabled: $("set-particles-enabled") ? $("set-particles-enabled").checked : true,
           maintenance: $("set-maintenance").checked,
         }),
       });

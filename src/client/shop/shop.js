@@ -25,6 +25,11 @@
     selectedPlanIdx: null,
     orderQty: 1,
     descExpanded: false,
+    discountCode: "",
+    discountResult: null,
+    discountMsg: "",
+    discountOk: false,
+    summary: null,
     currentUser: null,
     loadFailed: false,
   };
@@ -147,6 +152,63 @@
       .finally(function () {
         if (timer) clearTimeout(timer);
       });
+  }
+
+  function loadSummary() {
+    return fetch("/api/summary", { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data || typeof data !== "object") return null;
+        state.summary = data;
+
+        var uEl = document.getElementById("kpi-users");
+        var pEl = document.getElementById("kpi-products");
+        var sEl = document.getElementById("kpi-stock");
+        var dEl = document.getElementById("kpi-sold");
+        if (uEl) uEl.textContent = Number(data.totalUsers || 0).toLocaleString("en-US");
+        if (pEl) pEl.textContent = Number(data.totalProducts || 0).toLocaleString("en-US");
+        if (sEl) sEl.textContent = Number(data.readyStock || 0).toLocaleString("en-US");
+        if (dEl) dEl.textContent = Number(data.totalSold || 0).toLocaleString("en-US");
+
+        var wtEl = document.getElementById("sx-welcome-title");
+        var wsEl = document.getElementById("sx-welcome-sub");
+        if (wtEl && data.hero_title) wtEl.textContent = data.hero_title;
+        if (wsEl && data.hero_subtitle) wsEl.textContent = data.hero_subtitle;
+
+        var bannerEl = document.getElementById("sx-hero-banner-img");
+        if (bannerEl && data.banner_url) {
+          bannerEl.src = safeImgUrl(data.banner_url, "/assets/img/banner.jpg");
+        }
+
+        var restockHead = document.getElementById("sx-restocks-head");
+        var restockBox = document.getElementById("sx-restocks-container");
+        if (restockBox) {
+          var restocks = Array.isArray(data.recentRestocks) ? data.recentRestocks : [];
+          if (restocks.length) {
+            if (restockHead) restockHead.hidden = false;
+            restockBox.innerHTML = "";
+            restocks.forEach(function (item) {
+              var card = document.createElement("div");
+              card.className = "inf-restock-card";
+              card.innerHTML =
+                '<img src="' + escapeHtml(safeImgUrl(item.img)) + '" alt="' + escapeHtml(item.name) + '" loading="lazy">' +
+                '<div class="inf-restock-meta">' +
+                  '<strong>' + escapeHtml(item.name) + '</strong>' +
+                  '<span>พร้อมส่ง ' + Number(item.stock || 0) + ' ชิ้น &middot; เริ่ม ' + escapeHtml(fmtPrice(item.from || 0)) + '</span>' +
+                '</div>';
+              card.addEventListener("click", function () {
+                if (item.slug) openProductDetail(item.slug, true);
+              });
+              restockBox.appendChild(card);
+            });
+          } else {
+            if (restockHead) restockHead.hidden = true;
+            restockBox.innerHTML = "";
+          }
+        }
+        return data;
+      })
+      .catch(function () { return null; });
   }
 
   /* ================================================================
@@ -475,10 +537,17 @@
     var p = state.products.find(function (x) { return x.slug === slug || x.id === slug; });
     if (!p) return;
 
+    var plans = Array.isArray(p.plans) && p.plans.length ? p.plans : [];
+    var firstAvailIdx = plans.findIndex(function (pl) { return (Number(pl.stock) || 0) > 0; });
+
     state.activeProductSlug = p.slug;
-    state.selectedPlanIdx = null;
+    state.selectedPlanIdx = plans.length ? (firstAvailIdx !== -1 ? firstAvailIdx : 0) : null;
     state.orderQty = 1;
     state.descExpanded = false;
+    state.discountCode = "";
+    state.discountResult = null;
+    state.discountMsg = "";
+    state.discountOk = false;
 
     if (pushHistory && window.history && window.history.pushState) {
       var targetUrl = "/products/?item=" + encodeURIComponent(p.slug);
@@ -502,6 +571,51 @@
     window.scrollTo({ top: 0, behavior: "instant" });
   }
 
+  function validateDiscountForProduct(product, plan, qty, codeRaw) {
+    var code = String(codeRaw || "").trim().toUpperCase();
+    state.discountCode = code;
+    if (!code) {
+      state.discountResult = null;
+      state.discountMsg = "";
+      state.discountOk = false;
+      return Promise.resolve(null);
+    }
+    return fetch("/api/coupon/validate", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        code: code,
+        product: product.slug || product.id,
+        plan: plan ? plan.label : "",
+        quantity: qty,
+      }),
+    })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          return { ok: r.ok && j.valid, data: j };
+        });
+      })
+      .then(function (res) {
+        if (res.ok) {
+          state.discountOk = true;
+          state.discountResult = res.data;
+          state.discountMsg = res.data.message || "ใช้โค้ดส่วนลดสำเร็จ";
+        } else {
+          state.discountOk = false;
+          state.discountResult = null;
+          state.discountMsg = (res.data && res.data.message) || "รหัสส่วนลดไม่สามารถใช้งานได้";
+        }
+        return res;
+      })
+      .catch(function () {
+        state.discountOk = false;
+        state.discountResult = null;
+        state.discountMsg = "ตรวจสอบโค้ดส่วนลดไม่สำเร็จ กรุณาลองใหม่";
+        return null;
+      });
+  }
+
   function renderProductDetailView(p) {
     var root = ensureDetailRoot();
     if (!root) return;
@@ -510,12 +624,34 @@
       ? p.plans
       : [{ label: "มาตรฐาน", price: p.from || 99, stock: p.stock || 0 }];
 
-    var chosenPlan = state.selectedPlanIdx != null ? plans[state.selectedPlanIdx] : null;
-    var displayPrice = chosenPlan ? fmtPrice(chosenPlan.price) : getPriceRangeText(p);
+    if (state.selectedPlanIdx == null || !plans[state.selectedPlanIdx]) {
+      var firstAvail = plans.findIndex(function (pl) { return (Number(pl.stock) || 0) > 0; });
+      state.selectedPlanIdx = firstAvail !== -1 ? firstAvail : 0;
+    }
+
+    var chosenPlan = plans[state.selectedPlanIdx] || plans[0];
     var totalStock = p.stock != null ? p.stock : 0;
     var totalSold = Number(p.sold) || 0;
     var isUpdating = Boolean(p.updating || p.status_mode === "updating");
     var isAvailable = !isUpdating && totalStock > 0;
+
+    var activePlanStock = chosenPlan ? (chosenPlan.stock != null ? chosenPlan.stock : totalStock) : 0;
+    var maxQty = Math.max(1, Math.min(10, activePlanStock || 1));
+    if (state.orderQty < 1) state.orderQty = 1;
+    if (state.orderQty > maxQty) state.orderQty = maxQty;
+    var qty = state.orderQty;
+
+    var unitPrice = chosenPlan ? Number(chosenPlan.price) || 0 : 0;
+    var subtotal = Math.round(unitPrice * qty * 100) / 100;
+    var discountThb = state.discountOk && state.discountResult ? Number(state.discountResult.discountThb || 0) : 0;
+    var finalTotal = state.discountOk && state.discountResult
+      ? Number(state.discountResult.finalTotalThb)
+      : subtotal;
+
+    var checkSvg =
+      '<svg class="inf-plan-check" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' +
+        '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>' +
+      '</svg>';
 
     var planCardsHtml = plans
       .map(function (pl, idx) {
@@ -524,103 +660,133 @@
         var isOut = plStock <= 0;
         return (
           '<button type="button" class="inf-plan-card' + (isSelected ? " selected" : "") + (isOut ? " out-of-stock" : "") + '" data-plan-idx="' + idx + '">' +
-            '<div>' +
-              '<div class="inf-plan-name">' + escapeHtml(pl.label) + '</div>' +
-              '<div class="inf-plan-stock">' + (isUpdating ? "กำลังปิดอัปเดต" : (isOut ? "สินค้าหมด" : ("เหลือ " + plStock + " ชิ้น"))) + '</div>' +
+            '<div class="inf-plan-top">' +
+              '<span class="inf-plan-name">' + escapeHtml(pl.label) + '</span>' +
+              checkSvg +
             '</div>' +
-            '<div class="inf-plan-price">' + escapeHtml(fmtPrice(pl.price)) + '</div>' +
+            '<div class="inf-plan-bottom">' +
+              '<span class="inf-plan-price">' + escapeHtml(fmtPrice(pl.price)) + '</span>' +
+              '<span class="inf-plan-stock">' + (isUpdating ? "กำลังปิดอัปเดต" : (isOut ? "สินค้าหมด" : ("เหลือ " + plStock + " ชิ้น"))) + '</span>' +
+            '</div>' +
           '</button>'
         );
       })
       .join("");
 
     var rawDesc = p.desc || "สินค้าดิจิทัลพร้อมส่งมอบคีย์อัตโนมัติทันทีหลังชำระเงิน สามารถรับคีย์และลิงก์ดาวน์โหลดได้ในหน้าบัญชีของคุณตลอด 24 ชั่วโมง";
-    var shortDesc = rawDesc.length > 140 && !state.descExpanded ? rawDesc.slice(0, 140) + "..." : rawDesc;
-
+    var isLongDesc = rawDesc.length > 130 || rawDesc.split("\n").length > 3;
 
     var user = state.currentUser;
-    var activePlan = chosenPlan || plans[0];
-    var activePlanStock = activePlan ? (activePlan.stock != null ? activePlan.stock : totalStock) : 0;
-    var totalCost = activePlan ? activePlan.price : 0;
+    var buyBtnDisabled = isUpdating || !isAvailable || activePlanStock <= 0;
     var buyBtnText = isUpdating
       ? "สินค้ากำลังปิดอัปเดตชั่วคราว"
-      : (!isAvailable ? "สินค้าหมดชั่วคราว" : (chosenPlan ? ("สั่งซื้อทันที (" + fmtPrice(totalCost) + ")") : "สั่งซื้อสินค้านี้"));
+      : (!isAvailable || activePlanStock <= 0 ? "สินค้าหมดชั่วคราว" : "ซื้อสินค้า");
 
-    var safetyBoxCls = isUpdating ? " updating" : (isAvailable ? "" : " out");
-    var safetyBoxLabel = isUpdating
-      ? ("กำลังปิดอัปเดต" + (p.update_note ? " · " + p.update_note : ""))
-      : (isAvailable ? "ปลอดภัย (Undetected)" : "รอเติมสต็อก");
-    var statusBadgeHtml = isUpdating
-      ? '<span class="inf-pill-badge updating">กำลังปิดอัปเดต</span>'
-      : '<span class="inf-pill-badge ' + (isAvailable ? "open" : "closed") + '">' + (isAvailable ? "เปิดขาย" : "สินค้าหมด") + '</span>';
+    var statusPillCls = isUpdating ? " updating" : (isAvailable ? "" : " out");
+    var statusPillText = isUpdating
+      ? ("กำลังอัปเดต" + (p.update_note ? " · " + p.update_note : ""))
+      : (isAvailable ? "พร้อมขาย" : "สินค้าหมด");
 
     root.className = "inf-detail-view";
     root.innerHTML =
-      '<button type="button" class="inf-back-btn" id="inf-btn-back">' +
-        '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>' +
-        '<span>ย้อนกลับ</span>' +
-      '</button>' +
       '<nav class="inf-breadcrumb" aria-label="Breadcrumb">' +
         '<a href="#back-home" id="inf-bc-home">หน้าแรก</a>' +
         '<span>/</span>' +
-        '<a href="#back-cat" id="inf-bc-cat">' + escapeHtml((p.tag || "VALORANT").toUpperCase()) + '</a>' +
+        '<a href="/products/" id="inf-bc-all">หมวดหมู่สินค้า</a>' +
         '<span>/</span>' +
-        '<span class="cur">' + escapeHtml(p.name.toUpperCase()) + '</span>' +
+        '<a href="#back-cat" id="inf-bc-cat">' + escapeHtml(p.tag || "valorant") + '</a>' +
+        '<span>/</span>' +
+        '<span class="cur">' + escapeHtml(p.name) + '</span>' +
       '</nav>' +
       '<div class="inf-detail-grid">' +
         '<div class="inf-detail-left">' +
           '<div class="inf-detail-img-box">' +
             '<img src="' + escapeHtml(safeImgUrl(p.img, "https://img2.pic.in.th/serifvalopro9a13213f74c94f81.png")) + '" alt="' + escapeHtml(p.name) + '">' +
           '</div>' +
-          '<div class="inf-safety-card">' +
-            '<div class="inf-safety-label">' +
-              '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>' +
-              '<span>ระบบความปลอดภัย</span>' +
+          '<div class="inf-left-info-card">' +
+            '<div class="inf-left-info-head">' +
+              '<span class="inf-left-info-ico">' +
+                '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>' +
+              '</span>' +
+              '<div><strong>ข้อมูลสินค้า</strong><span>สถานะและรายละเอียดการจำหน่าย</span></div>' +
             '</div>' +
-            '<div class="inf-safety-status-box' + safetyBoxCls + '">' +
-              (isUpdating
-                ? '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>'
-                : '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>') +
-              '<span>' + escapeHtml(safetyBoxLabel) + '</span>' +
+            '<div class="inf-info-rows">' +
+              '<div class="inf-info-row">' +
+                '<span class="inf-info-k"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>หมวดหมู่</span>' +
+                '<a href="#back-cat" class="inf-info-v blue" id="inf-info-cat" style="text-decoration:none;">' + escapeHtml(p.tag || "Valorant") + ' &#8599;</a>' +
+              '</div>' +
+              '<div class="inf-info-row">' +
+                '<span class="inf-info-k"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>สถานะ</span>' +
+                '<span class="inf-status-pill-inline' + statusPillCls + '">' + escapeHtml(statusPillText) + '</span>' +
+              '</div>' +
+              '<div class="inf-info-row">' +
+                '<span class="inf-info-k"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>คงเหลือ</span>' +
+                '<span class="inf-info-v">' + totalStock + ' ชิ้น</span>' +
+              '</div>' +
+              '<div class="inf-info-row">' +
+                '<span class="inf-info-k"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>ขายไปแล้ว</span>' +
+                '<span class="inf-info-v blue">' + totalSold + ' ชิ้น</span>' +
+              '</div>' +
+              '<div class="inf-info-row">' +
+                '<span class="inf-info-k"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>ประเภทสินค้า</span>' +
+                '<span class="inf-info-v">' + (plans.length > 1 ? "มีตัวเลือกย่อย" : "คีย์จัดส่งอัตโนมัติ") + '</span>' +
+              '</div>' +
+              '<div class="inf-info-row">' +
+                '<span class="inf-info-k"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>อัปเดตล่าสุด</span>' +
+                '<span class="inf-info-v">' + escapeHtml(formatThaiDateTime(p.updatedAt)) + '</span>' +
+              '</div>' +
             '</div>' +
-            '<div class="inf-safety-label" style="margin-top:4px;">' +
-              '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' +
-              '<span>เวลาอัพเดทล่าสุด</span>' +
-            '</div>' +
-            '<div class="inf-safety-time-box">' + escapeHtml(formatThaiDateTime(p.updatedAt)) + '</div>' +
           '</div>' +
         '</div>' +
         '<div class="inf-detail-right">' +
           '<h1 class="inf-detail-title">' + escapeHtml(p.name) + '</h1>' +
-          '<div class="inf-detail-badges">' +
-            statusBadgeHtml +
-            '<span class="inf-pill-badge">คงเหลือ ' + totalStock + ' ชิ้น</span>' +
-            '<span class="inf-pill-badge">ขายแล้ว ' + totalSold + ' ชิ้น</span>' +
-          '</div>' +
-          '<div class="inf-sec-label">' +
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>' +
-            '<span>เลือกตัวเลือก</span>' +
-          '</div>' +
-          '<div class="inf-plans-grid">' + planCardsHtml + '</div>' +
-          '<div class="inf-sec-label">' +
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>' +
-            '<span>ราคา</span>' +
-          '</div>' +
-          '<div class="inf-big-price">' + escapeHtml(displayPrice) + '</div>' +
-          '<div class="inf-cta-row">' +
-            '<button type="button" class="inf-btn-white inf-cta-buy" id="inf-btn-open-modal"' + (isUpdating || !isAvailable ? " disabled" : "") + '>' +
-              '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>' +
-              '<span>' + (isUpdating ? "สินค้ากำลังปิดอัปเดต" : (!isAvailable ? "สินค้าหมดชั่วคราว" : (chosenPlan ? ("สั่งซื้อทันที (" + fmtPrice(totalCost) + ")") : "สั่งซื้อสินค้านี้"))) + '</span>' +
-            '</button>' +
-            '<a href="/account/" class="inf-btn-dark inf-cta-wallet">เติมเงิน' + (user ? (" (" + fmtPrice(user.balance || 0) + ")") : "") + '</a>' +
-          '</div>' +
-          '<div class="inf-desc-card">' +
+          (isUpdating && p.update_note ? '<div class="inf-updating-banner">' + escapeHtml(p.update_note) + '</div>' : "") +
+          '<div class="inf-desc-section">' +
             '<div class="inf-desc-head">' +
-              '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>' +
+              '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>' +
               '<span>รายละเอียดสินค้า</span>' +
             '</div>' +
-            '<div class="inf-desc-body" id="inf-desc-text">' + escapeHtml(shortDesc) + '</div>' +
-            '<button type="button" class="inf-desc-toggle-btn" id="inf-btn-readmore">' + (state.descExpanded ? "ย่อรายละเอียด" : "อ่านเพิ่มเติม") + '</button>' +
+            '<div class="inf-desc-body' + (!state.descExpanded && isLongDesc ? " is-clamped" : "") + '" id="inf-desc-text">' + escapeHtml(rawDesc) + '</div>' +
+            (isLongDesc
+              ? '<div class="inf-desc-toggle-wrap"><button type="button" class="inf-desc-toggle-btn" id="inf-btn-readmore">' + (state.descExpanded ? "ย่อรายละเอียด &#8963;" : "แสดงเพิ่มเติม &#8964;") + '</button></div>'
+              : "") +
+          '</div>' +
+          '<div class="inf-sec-label">' +
+            '<span class="inf-sec-label-l"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>เลือกตัวเลือก</span>' +
+            '<span class="inf-sec-label-r">' + plans.length + ' ตัวเลือก</span>' +
+          '</div>' +
+          '<div class="inf-plans-grid">' + planCardsHtml + '</div>' +
+          '<div class="inf-inline-qty-row">' +
+            '<span>จำนวน</span>' +
+            '<div class="inf-inline-qty">' +
+              '<button type="button" id="inf-qty-minus"' + (qty <= 1 || isUpdating ? " disabled" : "") + '>&minus;</button>' +
+              '<b id="inf-qty-val">' + qty + '</b>' +
+              '<button type="button" id="inf-qty-plus"' + (qty >= maxQty || isUpdating ? " disabled" : "") + '>+</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="inf-coupon-box">' +
+            '<div class="inf-coupon-row">' +
+              '<input type="text" id="inf-coupon-input" class="inf-coupon-input" placeholder="โค้ดส่วนลด (ถ้ามี)" value="' + escapeHtml(state.discountCode || "") + '" autocomplete="off">' +
+              '<button type="button" id="inf-coupon-check" class="inf-coupon-btn">ตรวจสอบ</button>' +
+            '</div>' +
+            '<p class="inf-coupon-msg ' + (state.discountMsg ? (state.discountOk ? "ok" : "err") : "") + '" id="inf-coupon-msg">' + escapeHtml(state.discountMsg || "") + '</p>' +
+          '</div>' +
+          '<div class="inf-total-box">' +
+            '<div class="inf-total-left">' +
+              '<strong>ราคารวมทั้งสิ้น</strong>' +
+              '<span>' + qty + ' ชิ้น &times; ' + escapeHtml(fmtPrice(unitPrice)) + (discountThb > 0 ? (" &middot; ส่วนลด -" + escapeHtml(fmtPrice(discountThb))) : "") + '</span>' +
+            '</div>' +
+            '<div class="inf-total-right">' +
+              (discountThb > 0 ? '<span class="inf-total-strike">' + escapeHtml(fmtPrice(subtotal)) + '</span>' : "") +
+              '<div class="inf-total-price">' + escapeHtml(fmtPrice(finalTotal)) + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="inf-cta-row">' +
+            '<button type="button" class="inf-cta-buy" id="inf-btn-open-modal"' + (buyBtnDisabled ? " disabled" : "") + '>' +
+              '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>' +
+              '<span>' + escapeHtml(buyBtnText) + '</span>' +
+            '</button>' +
+            '<a href="/account/" class="inf-btn-dark inf-cta-wallet">เติมเงิน' + (user ? (" (" + fmtPrice(user.balance || 0) + ")") : "") + '</a>' +
           '</div>' +
         '</div>' +
       '</div>' +
@@ -635,10 +801,6 @@
         '<div class="product-grid" id="inf-related-grid"></div>' +
       '</div>';
 
-    // Bind back & breadcrumb
-    root.querySelector("#inf-btn-back").addEventListener("click", function () {
-      closeProductDetail(true);
-    });
     root.querySelector("#inf-bc-home").addEventListener("click", function (e) {
       e.preventDefault();
       closeProductDetail(true);
@@ -648,36 +810,109 @@
       closeProductDetail(true);
       selectCategoryTab(p.tag || "");
     });
+    var infoCat = root.querySelector("#inf-info-cat");
+    if (infoCat) {
+      infoCat.addEventListener("click", function (e) {
+        e.preventDefault();
+        closeProductDetail(true);
+        selectCategoryTab(p.tag || "");
+      });
+    }
     root.querySelector("#inf-related-all").addEventListener("click", function (e) {
       e.preventDefault();
       closeProductDetail(true);
       selectCategoryTab("");
     });
 
-    // Bind plan selection
+    function refreshCouponThenRender() {
+      var curPl = plans[state.selectedPlanIdx] || plans[0];
+      if (state.discountCode) {
+        validateDiscountForProduct(p, curPl, state.orderQty, state.discountCode).then(function () {
+          renderProductDetailView(p);
+        });
+      } else {
+        renderProductDetailView(p);
+      }
+    }
+
     root.querySelectorAll(".inf-plan-card").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var idx = Number(btn.dataset.planIdx);
-        state.selectedPlanIdx = state.selectedPlanIdx === idx ? null : idx;
-        renderProductDetailView(p);
+        state.selectedPlanIdx = idx;
+        state.orderQty = 1;
+        refreshCouponThenRender();
       });
     });
 
-    // Bind Read More toggle
+    var qtyMinus = root.querySelector("#inf-qty-minus");
+    var qtyPlus = root.querySelector("#inf-qty-plus");
+    if (qtyMinus) {
+      qtyMinus.addEventListener("click", function () {
+        if (state.orderQty > 1) {
+          state.orderQty--;
+          refreshCouponThenRender();
+        }
+      });
+    }
+    if (qtyPlus) {
+      qtyPlus.addEventListener("click", function () {
+        if (state.orderQty < maxQty) {
+          state.orderQty++;
+          refreshCouponThenRender();
+        }
+      });
+    }
+
+    var couponInput = root.querySelector("#inf-coupon-input");
+    var couponCheckBtn = root.querySelector("#inf-coupon-check");
+    if (couponInput) {
+      couponInput.addEventListener("input", function () {
+        state.discountCode = couponInput.value.trim().toUpperCase();
+        if (!state.discountCode) {
+          state.discountOk = false;
+          state.discountResult = null;
+          state.discountMsg = "";
+          var mEl = root.querySelector("#inf-coupon-msg");
+          if (mEl) { mEl.textContent = ""; mEl.className = "inf-coupon-msg"; }
+        }
+      });
+      couponInput.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          if (couponCheckBtn) couponCheckBtn.click();
+        }
+      });
+    }
+    if (couponCheckBtn) {
+      couponCheckBtn.addEventListener("click", function () {
+        var codeVal = couponInput ? couponInput.value.trim().toUpperCase() : "";
+        if (!codeVal) {
+          state.discountCode = "";
+          state.discountOk = false;
+          state.discountResult = null;
+          state.discountMsg = "กรุณากรอกรหัสส่วนลด";
+          renderProductDetailView(p);
+          return;
+        }
+        couponCheckBtn.disabled = true;
+        couponCheckBtn.textContent = "กำลังตรวจ...";
+        validateDiscountForProduct(p, chosenPlan, state.orderQty, codeVal).then(function () {
+          renderProductDetailView(p);
+        });
+      });
+    }
+
     var readMoreBtn = root.querySelector("#inf-btn-readmore");
     if (readMoreBtn) {
       readMoreBtn.addEventListener("click", function () {
         state.descExpanded = !state.descExpanded;
         var bodyEl = root.querySelector("#inf-desc-text");
         if (bodyEl) {
-          bodyEl.textContent = state.descExpanded
-            ? rawDesc
-            : (rawDesc.length > 140 ? rawDesc.slice(0, 140) + "..." : rawDesc);
+          bodyEl.classList.toggle("is-clamped", !state.descExpanded && isLongDesc);
         }
-        readMoreBtn.textContent = state.descExpanded ? "ย่อรายละเอียด" : "อ่านเพิ่มเติม";
+        readMoreBtn.innerHTML = state.descExpanded ? "ย่อรายละเอียด &#8963;" : "แสดงเพิ่มเติม &#8964;";
       });
     }
-
 
     var openModalBtn = root.querySelector("#inf-btn-open-modal");
     if (openModalBtn) {
@@ -725,7 +960,9 @@
       planStock = curPlan ? (curPlan.stock != null ? curPlan.stock : totalStock) : 0;
       var maxQty = Math.max(1, Math.min(10, planStock || 1));
       if (qty > maxQty) qty = maxQty;
-      var totalCost = curPlan ? curPlan.price * qty : 0;
+      var subtotalCost = curPlan ? curPlan.price * qty : 0;
+      var modalDiscountThb = state.discountOk && state.discountResult ? Number(state.discountResult.discountThb || 0) : 0;
+      var totalCost = state.discountOk && state.discountResult ? Number(state.discountResult.finalTotalThb) : subtotalCost;
       var userBalance = user ? Number(user.balance || 0) : 0;
       var hasEnoughBalance = userBalance >= totalCost;
 
@@ -777,6 +1014,9 @@
           '</div>' +
           '<div class="inf-modal-summary-box">' +
             '<div class="inf-modal-summary-row"><span>ราคาต่อหน่วย:</span><span>' + fmtPrice(curPlan ? curPlan.price : 0) + '</span></div>' +
+            (modalDiscountThb > 0
+              ? '<div class="inf-modal-summary-row"><span>ส่วนลด (' + escapeHtml(state.discountCode) + '):</span><span style="color:#34d399;">-' + moneyFull(modalDiscountThb) + '</span></div>'
+              : '') +
             '<div class="inf-modal-summary-row"><span>ยอดเงินในบัญชีของคุณ:</span><span style="color:' + (userBalance < totalCost ? '#f87171' : '#34d399') + ';">' + moneyFull(userBalance) + '</span></div>' +
             '<div class="inf-modal-summary-row" style="padding-top:8px;border-top:1px solid rgba(255,255,255,0.08);font-size:14px;"><strong style="color:#fff;">ยอดรวมที่ต้องชำระ:</strong><strong style="color:#34d399;font-size:16px;">' + moneyFull(totalCost) + '</strong></div>' +
           '</div>' +
@@ -809,7 +1049,11 @@
           planSel.addEventListener("change", function () {
             curIdx = parseInt(this.value, 10) || 0;
             state.selectedPlanIdx = curIdx;
-            updateModalContent();
+            if (state.discountCode) {
+              validateDiscountForProduct(product, plans[curIdx], qty, state.discountCode).then(updateModalContent);
+            } else {
+              updateModalContent();
+            }
             state.orderQty = qty;
           });
         }
@@ -817,12 +1061,26 @@
         var btnPls = backdrop.querySelector("#inf-m-qty-pls");
         if (btnMin) {
           btnMin.addEventListener("click", function () {
-            if (qty > 1) { qty--; state.orderQty = qty; updateModalContent(); }
+            if (qty > 1) {
+              qty--;
+              state.orderQty = qty;
+              if (state.discountCode) {
+                validateDiscountForProduct(product, plans[curIdx], qty, state.discountCode).then(updateModalContent);
+              } else {
+                updateModalContent();
+              }
+            }
           });
         }
         if (btnPls) {
           btnPls.addEventListener("click", function () {
-            qty++; state.orderQty = qty; updateModalContent();
+            qty++;
+            state.orderQty = qty;
+            if (state.discountCode) {
+              validateDiscountForProduct(product, plans[curIdx], qty, state.discountCode).then(updateModalContent);
+            } else {
+              updateModalContent();
+            }
           });
         }
         var btnConfirm = backdrop.querySelector("#inf-m-confirm-btn");
@@ -873,6 +1131,7 @@
         product: product.slug || product.id,
         plan: plan.label,
         quantity: qty,
+        discountCode: state.discountOk && state.discountCode ? state.discountCode : undefined,
       }),
     })
       .then(function (r) {
@@ -888,6 +1147,10 @@
           backdrop.remove();
           document.body.style.overflow = "";
         }
+        state.discountCode = "";
+        state.discountResult = null;
+        state.discountMsg = "";
+        state.discountOk = false;
         if (window.XenaryFirebase && typeof window.XenaryFirebase.syncOrderToFirestore === "function") {
           window.XenaryFirebase.syncOrderToFirestore(order).catch(function () {});
         }
@@ -925,6 +1188,7 @@
         product: product.slug || product.id,
         plan: plan.label,
         quantity: qty,
+        discountCode: state.discountOk && state.discountCode ? state.discountCode : undefined,
       }),
     })
       .then(function (r) {
@@ -934,6 +1198,10 @@
         });
       })
       .then(function (order) {
+        state.discountCode = "";
+        state.discountResult = null;
+        state.discountMsg = "";
+        state.discountOk = false;
         document.dispatchEvent(new Event("xn:auth"));
         Promise.all([load(), fetchCurrentUser()]).then(function () {
           var updatedProd = state.products.find(function (x) { return x.slug === product.slug; }) || product;
@@ -979,6 +1247,10 @@
       ? '<a href="' + escapeHtml(dlUrl) + '" target="_blank" rel="noopener noreferrer" class="sx-m-submit" style="margin-bottom:8px;background:#10b981;color:#000!important;">ดาวน์โหลดไฟล์ / โปรแกรม (Download)</a>'
       : "";
 
+    var discountReceiptRow = order.discount_code && Number(order.discount_amount) > 0
+      ? '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px"><span style="color:var(--sx-muted)">ส่วนลด (' + escapeHtml(order.discount_code) + ')</span><span style="color:#34d399">-' + moneyFull(order.discount_amount) + '</span></div>'
+      : "";
+
     backdrop.innerHTML =
       '<div class="sx-modal" role="dialog" aria-modal="true" style="text-align:center">' +
         '<button type="button" class="sx-modal-close" id="sx-m-close" aria-label="Close">&times;</button>' +
@@ -987,6 +1259,7 @@
         '<div class="sx-m-box" style="text-align:left">' +
           '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px"><span style="color:var(--sx-muted)">เลขที่ออเดอร์</span><strong>' + escapeHtml(order.id) + '</strong></div>' +
           '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px"><span style="color:var(--sx-muted)">สินค้า</span><span>' + escapeHtml(order.product.name) + ' &middot; ' + escapeHtml(order.plan.label) + ' &times; ' + order.quantity + '</span></div>' +
+          discountReceiptRow +
           '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px"><span style="color:var(--sx-muted)">ยอดชำระ</span><strong>' + moneyFull(order.total) + '</strong></div>' +
           '<div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--sx-muted)">ยอดคงเหลือ</span><span>' + moneyFull(order.balance) + '</span></div>' +
           keysHtml +
@@ -1020,6 +1293,7 @@
      5. BOOT SEQUENCE & POPSTATE SUPPORT
      ================================================================ */
   function boot() {
+    loadSummary();
     Promise.all([load(), fetchCurrentUser()]).then(function () {
       renderCategories();
       renderCategoryTabs();

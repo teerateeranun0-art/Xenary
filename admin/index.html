@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <meta name="theme-color" content="#000000">
   <link rel="icon" href="/favicon.ico">
-  <link rel="stylesheet" href="/src/client/shop/shop.css?v=20261021-r81">
-  <link rel="stylesheet" href="/assets/css/site.css?v=20261021-r81">
+  <link rel="stylesheet" href="/src/client/shop/shop.css?v=20261116-u1">
+  <link rel="stylesheet" href="/assets/css/site.css?v=20261116-u1">
 </head>
 <body>
   <header class="xn-head">
@@ -48,85 +48,195 @@
 
       
       <div id="adm-main-panel">
-        <div class="adm-header">
-          <div>
-            <h1>ศูนย์ควบคุมระบบ XENARY</h1>
-            <p class="xn-sub">จัดการข้อมูลร้านค้า สินค้า สต็อกคีย์ ตรวจสอบการชำระเงิน และสมาชิกแบบเรียลไทม์</p>
-          </div>
-        </div>
-
-        
-        <div class="adm-nav-wrapper">
-          <button type="button" class="adm-scroll-btn" id="adm-scroll-left" aria-label="เลื่อนซ้าย" title="เลื่อนซ้าย">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-          </button>
-          <nav class="adm-nav-bar" id="adm-nav-bar" role="tablist">
-            <button type="button" class="adm-nav-btn active" data-tab="dashboard">ภาพรวม</button>
-            <button type="button" class="adm-nav-btn" data-tab="products">จัดการสินค้า</button>
-            <button type="button" class="adm-nav-btn" data-tab="keys">สต็อกคีย์สินค้า</button>
-            <button type="button" class="adm-nav-btn" data-tab="topups">รายการเติมเงิน</button>
-            <button type="button" class="adm-nav-btn" data-tab="orders">คำสั่งซื้อ</button>
-            <button type="button" class="adm-nav-btn" data-tab="users">สมาชิก & ยอดเงิน</button>
-            <button type="button" class="adm-nav-btn" data-tab="coupons">คูปองส่วนลด</button>
-            <button type="button" class="adm-nav-btn" data-tab="news">ประกาศข่าวสาร</button>
-            <button type="button" class="adm-nav-btn" data-tab="channels">ช่องทางชำระเงิน</button>
-            <button type="button" class="adm-nav-btn" data-tab="settings">ตั้งค่าระบบ</button>
-          </nav>
-          <button type="button" class="adm-scroll-btn" id="adm-scroll-right" aria-label="เลื่อนขวา" title="เลื่อนขวา">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-          </button>
-        </div>
-
-        
-        <div id="pane-dashboard" class="adm-tab-pane">
-          <div class="adm-stats-grid">
-            <div class="adm-stat-card">
-              <span class="label">รายได้วันนี้</span>
-              <span class="val green" id="st-rev-today">฿0.00</span>
-            </div>
-            <div class="adm-stat-card">
-              <span class="label">รายได้เดือนนี้</span>
-              <span class="val green" id="st-rev-month">฿0.00</span>
-            </div>
-            <div class="adm-stat-card">
-              <span class="label">รายได้รวมทั้งหมด</span>
-              <span class="val green" id="st-rev-total">฿0.00</span>
-            </div>
-            <div class="adm-stat-card">
-              <span class="label">ออเดอร์ที่ชำระแล้ว</span>
-              <span class="val" id="st-orders-paid">0 รายการ</span>
-            </div>
-            <div class="adm-stat-card">
-              <span class="label">สมาชิกทั้งหมด</span>
-              <span class="val" id="st-users">0 บัญชี</span>
-            </div>
-            <div class="adm-stat-card">
-              <span class="label">เติมเงินรอตรวจสอบ</span>
-              <span class="val" id="st-topups-pending">0 รายการ</span>
-            </div>
-            <div class="adm-stat-card">
-              <span class="label">คีย์คงเหลือพร้อมขาย</span>
-              <span class="val" id="st-keys-remain">0 คีย์</span>
-            </div>
-          </div>
-
-          <div class="xn-s6">
-            <div class="xn-card xn-s7">
-              <div class="xn-s8">
-                <h2 class="xn-s4">สรุปสต็อกคีย์แยกตามสินค้า</h2>
-                <button type="button" class="adm-btn sm" id="dash-go-keys">จัดการคลังคีย์ &rarr;</button>
+        <div class="adm-shell">
+          <aside class="adm-sidebar" id="adm-sidebar">
+            <div class="adm-side-head">
+              <div class="adm-side-brand">
+                <img src="/assets/img/logo.png" alt="XENARY">
+                <div>
+                  <strong>XENARY</strong>
+                  <span>Dashboard</span>
+                </div>
               </div>
-              <div id="dash-product-stock"></div>
+              <button type="button" class="adm-side-close" id="adm-side-close" aria-label="ปิดเมนู">&times;</button>
             </div>
-            <div class="xn-card xn-s7">
-              <div class="xn-s8">
-                <h2 class="xn-s4">คำสั่งซื้อล่าสุด</h2>
-                <button type="button" class="adm-btn sm" id="dash-go-orders">ดูทั้งหมด &rarr;</button>
+
+            <div class="adm-side-search-wrap">
+              <svg class="adm-side-search-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="adm-nav-search" class="adm-side-search" placeholder="Search anything">
+            </div>
+
+            <div class="adm-side-group">
+              <div class="adm-side-group-title">Overview</div>
+              <button type="button" class="adm-nav-btn active" data-tab="dashboard" data-group="Overview">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+                <span>ภาพรวม &amp; สถิติ</span>
+              </button>
+            </div>
+
+            <div class="adm-side-group">
+              <div class="adm-side-group-title">Store</div>
+              <button type="button" class="adm-nav-btn" data-tab="products" data-group="Store">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                <span>จัดการสินค้า</span>
+              </button>
+              <button type="button" class="adm-nav-btn" data-tab="keys" data-group="Store">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>
+                <span>สต็อกคีย์สินค้า</span>
+              </button>
+              <button type="button" class="adm-nav-btn" data-tab="orders" data-group="Store">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
+                <span>คำสั่งซื้อ</span>
+              </button>
+              <button type="button" class="adm-nav-btn" data-tab="coupons" data-group="Store">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/></svg>
+                <span>คูปอง &amp; ส่วนลด</span>
+              </button>
+            </div>
+
+            <div class="adm-side-group">
+              <div class="adm-side-group-title">Topup</div>
+              <button type="button" class="adm-nav-btn" data-tab="topups" data-group="Topup">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                <span>รายการเติมเงิน</span>
+              </button>
+              <button type="button" class="adm-nav-btn" data-tab="channels" data-group="Topup">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                <span>ช่องทางชำระเงิน</span>
+              </button>
+            </div>
+
+            <div class="adm-side-group">
+              <div class="adm-side-group-title">Design &amp; Settings</div>
+              <button type="button" class="adm-nav-btn" data-tab="news" data-group="Design &amp; Settings">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+                <span>ประกาศข่าวสาร</span>
+              </button>
+              <button type="button" class="adm-nav-btn" data-tab="settings" data-group="Design &amp; Settings">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                <span>ตั้งค่าเว็บไซต์</span>
+              </button>
+            </div>
+
+            <div class="adm-side-group">
+              <div class="adm-side-group-title">System</div>
+              <button type="button" class="adm-nav-btn" data-tab="users" data-group="System">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                <span>สมาชิก &amp; ยอดเงิน</span>
+              </button>
+            </div>
+
+            <div class="adm-side-user" id="adm-side-user">
+              <div class="adm-side-avatar">A</div>
+              <div class="adm-side-user-meta">
+                <strong id="adm-side-uname">Admin</strong>
+                <span>แอดมิน</span>
               </div>
-              <div id="dash-recent-orders"></div>
             </div>
-          </div>
-        </div>
+          </aside>
+
+          <div class="adm-main-area">
+            <div class="adm-topbar">
+              <div class="adm-topbar-left">
+                <button type="button" class="adm-sidebar-toggle" id="adm-sidebar-toggle" aria-label="เปิดเมนู">&#9776;</button>
+                <div class="adm-topbar-crumb" id="adm-topbar-crumb">Overview / <b>ภาพรวม &amp; สถิติ</b></div>
+              </div>
+              <div class="adm-topbar-actions">
+                <a href="/" class="adm-btn sm" style="text-decoration:none;">ไปที่หน้าร้าน &#8599;</a>
+              </div>
+            </div>
+
+            <div id="pane-dashboard" class="adm-tab-pane">
+              <div class="adm-stats-grid">
+                <div class="adm-stat-card">
+                  <span class="label">รายได้วันนี้</span>
+                  <span class="val green" id="st-rev-today">฿0.00</span>
+                </div>
+                <div class="adm-stat-card">
+                  <span class="label">รายได้เดือนนี้</span>
+                  <span class="val green" id="st-rev-month">฿0.00</span>
+                </div>
+                <div class="adm-stat-card">
+                  <span class="label">รายได้รวมทั้งหมด</span>
+                  <span class="val green" id="st-rev-total">฿0.00</span>
+                </div>
+                <div class="adm-stat-card">
+                  <span class="label">ออเดอร์ที่ชำระแล้ว</span>
+                  <span class="val" id="st-orders-paid">0 รายการ</span>
+                </div>
+                <div class="adm-stat-card">
+                  <span class="label">สมาชิกทั้งหมด</span>
+                  <span class="val" id="st-users">0 บัญชี</span>
+                </div>
+                <div class="adm-stat-card">
+                  <span class="label">เติมเงินรอตรวจสอบ</span>
+                  <span class="val yellow" id="st-topups-pending">0 รายการ</span>
+                </div>
+                <div class="adm-stat-card">
+                  <span class="label">คีย์คงเหลือพร้อมขาย</span>
+                  <span class="val blue" id="st-keys-remain">0 คีย์</span>
+                </div>
+              </div>
+
+              <div class="adm-analytics-card">
+                <div class="adm-analytics-head">
+                  <div>
+                    <h2 class="xn-s4" style="margin:0;">แนวโน้มรายได้ &amp; การเติบโต</h2>
+                    <span class="adm-sub">ภาพรวมยอดขายและเติมเงินแบบเรียลไทม์</span>
+                  </div>
+                  <div class="adm-analytics-controls">
+                    <button type="button" class="adm-seg-btn active" id="adm-range-7d" data-range="7d">7 วัน</button>
+                    <button type="button" class="adm-seg-btn" id="adm-range-30d" data-range="30d">30 วัน</button>
+                    <button type="button" class="adm-seg-btn" id="adm-range-12m" data-range="12m">12 เดือน</button>
+                    <span style="width:1px;height:18px;background:rgba(255,255,255,0.1);margin:0 4px;"></span>
+                    <button type="button" class="adm-seg-btn active" id="adm-metric-rev" data-metric="rev">รายได้ &amp; เติมเงิน</button>
+                    <button type="button" class="adm-seg-btn" id="adm-metric-ord" data-metric="ord">ออเดอร์ &amp; สมาชิกใหม่</button>
+                  </div>
+                </div>
+                <div class="adm-chart-legend" id="adm-chart-legend"></div>
+                <div class="adm-chart-box" id="adm-analytics-chart"><div class="adm-loading">กำลังประมวลผลกราฟ...</div></div>
+              </div>
+
+              <div class="adm-analytics-grid2">
+                <div class="adm-analytics-card" style="margin-bottom:0;">
+                  <h2 class="xn-s4" style="margin:0 0 12px;">สัดส่วนรายได้ตามหมวดหมู่ &amp; ยอดขายรายชั่วโมง</h2>
+                  <div id="adm-cat-share"></div>
+                  <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.06);">
+                    <div style="font-size:12px;color:#9ca3af;margin-bottom:4px;">การกระจายยอดขายตลอด 24 ชั่วโมง (เวลาไทย)</div>
+                    <div class="adm-hourly-bars" id="adm-hourly-24"></div>
+                  </div>
+                </div>
+                <div class="adm-analytics-card" style="margin-bottom:0;">
+                  <h2 class="xn-s4" style="margin:0 0 12px;">ช่องทางเติมเงิน &amp; แจ้งเตือนสต็อก</h2>
+                  <div id="adm-topup-channels"></div>
+                  <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.06);">
+                    <div style="font-size:12px;color:#fbbf24;font-weight:600;margin-bottom:6px;">สินค้าสต็อกใกล้หมด (&le; 5 ชิ้น)</div>
+                    <div id="adm-low-stock"></div>
+                  </div>
+                  <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.06);">
+                    <div style="font-size:12px;color:#9ca3af;margin-bottom:6px;">ลูกค้ายอดซื้อสูงสุด</div>
+                    <div id="adm-top-spenders"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="xn-s6" style="margin-top:16px;">
+                <div class="xn-card xn-s7">
+                  <div class="xn-s8">
+                    <h2 class="xn-s4">สรุปสต็อกคีย์แยกตามสินค้า</h2>
+                    <button type="button" class="adm-btn sm" id="dash-go-keys">จัดการคลังคีย์ &rarr;</button>
+                  </div>
+                  <div id="dash-product-stock"></div>
+                </div>
+                <div class="xn-card xn-s7">
+                  <div class="xn-s8">
+                    <h2 class="xn-s4">คำสั่งซื้อล่าสุด</h2>
+                    <button type="button" class="adm-btn sm" id="dash-go-orders">ดูทั้งหมด &rarr;</button>
+                  </div>
+                  <div id="dash-recent-orders"></div>
+                </div>
+              </div>
+            </div>
 
         
         <div id="pane-products" class="adm-tab-pane" hidden>
@@ -344,17 +454,37 @@
         <div id="pane-coupons" class="adm-tab-pane" hidden>
           <div class="xn-card" id="coupon-form-card">
             <div class="xn-s26">
-              <h2 class="xn-s4" id="cp-form-title">สร้างโค้ดคูปองเครดิตใหม่</h2>
+              <h2 class="xn-s4" id="cp-form-title">สร้างโค้ดคูปอง / โค้ดส่วนลดใหม่</h2>
               <button type="button" id="btn-cancel-edit-cp" class="adm-btn sm" hidden>ยกเลิกการแก้ไข</button>
             </div>
             <form id="f-add-coupon" class="xn-form">
               <input type="hidden" id="cp-edit-id" value="">
-              <div class="xn-s11">
-                <label>รหัสโค้ดคูปอง
-                  <input id="cp-code" placeholder="เช่น FREE50, XENARYVIP" required>
+              <div class="xn-s10">
+                <label>ประเภทคูปอง
+                  <select class="xn-s12" id="cp-type">
+                    <option value="discount">โค้ดส่วนลดสั่งซื้อสินค้า (Discount Code)</option>
+                    <option value="credit">โค้ดเติมเงินเข้ากระเป๋า (Credit Code)</option>
+                  </select>
                 </label>
-                <label>มูลค่าเครดิตที่ได้รับ (บาท)
-                  <input id="cp-amount" type="number" min="1" step="0.5" placeholder="50" required>
+                <label id="cp-discount-type-wrap">รูปแบบส่วนลด
+                  <select class="xn-s12" id="cp-discount-type">
+                    <option value="fixed">ลดเป็นบาท (Fixed ฿)</option>
+                    <option value="percent">ลดเป็นเปอร์เซ็นต์ (Percent %)</option>
+                  </select>
+                </label>
+                <label>รหัสโค้ดคูปอง
+                  <input id="cp-code" placeholder="เช่น SAVE20, FREE50" required>
+                </label>
+              </div>
+              <div class="xn-s10">
+                <label id="cp-amount-label">มูลค่าส่วนลด / เครดิต
+                  <input id="cp-amount" type="number" min="1" step="0.5" placeholder="20" required>
+                </label>
+                <label>ยอดซื้อขั้นต่ำ (บาท — 0 = ไม่มีขั้นต่ำ)
+                  <input id="cp-min-spend" type="number" min="0" step="1" placeholder="0">
+                </label>
+                <label>วันหมดอายุ (เว้นว่าง = ไม่หมดอายุ)
+                  <input id="cp-expires-at" type="datetime-local">
                 </label>
               </div>
               <div class="xn-s11">
@@ -468,9 +598,28 @@
                   <input id="set-discord-url" placeholder="https://discord.gg/...">
                 </label>
               </div>
-              <label class="xn-chk xn-s27">
-                <input type="checkbox" id="set-maintenance"> เปิดโหมดปิดปรับปรุงเว็บไซต์ชั่วคราว (Maintenance Mode)
+              <div class="xn-s10">
+                <label>ลิงก์ YouTube หลัก
+                  <input id="set-youtube-url" placeholder="https://youtube.com/...">
+                </label>
+                <label>หัวข้อต้อนรับหน้าแรก (Hero Title)
+                  <input id="set-hero-title" placeholder="ยินดีต้อนรับสู่ XENARY Store">
+                </label>
+                <label>คำโปรยต้อนรับหน้าแรก (Hero Subtitle)
+                  <input id="set-hero-subtitle" placeholder="ร้านจำหน่ายสินค้าดิจิทัลและซอฟต์แวร์คุณภาพ...">
+                </label>
+              </div>
+              <label>ข้อความประกาศแถบเลื่อนใต้ Navbar (Marquee Ticker)
+                <input id="set-marquee-text" placeholder="เติมเงินซื้อสินค้าแล้ว ไม่มีนโยบาย คืนเงินทุกกรณี...">
               </label>
+              <div class="xn-s14">
+                <label class="xn-chk xn-s27">
+                  <input type="checkbox" id="set-particles-enabled" checked> เปิดใช้งานหิมะ / Ambient Particles บนหน้าเว็บ
+                </label>
+                <label class="xn-chk xn-s27">
+                  <input type="checkbox" id="set-maintenance"> เปิดโหมดปิดปรับปรุงเว็บไซต์ชั่วคราว (Maintenance Mode)
+                </label>
+              </div>
               <p class="xn-msg" id="msg-settings"></p>
               <button class="xn-btn" type="submit">บันทึกการตั้งค่าทั้งหมด</button>
             </form>
@@ -528,8 +677,9 @@
             <h2>รายการช่องทางติดต่อทั้งหมดของร้าน</h2>
             <div id="list-support-links"></div>
           </div>
+            </div>
+          </div>
         </div>
-
       </div>
     </div>
   </main>
@@ -598,7 +748,7 @@
   <footer class="xn-foot"><div class="xn-foot-inner"><div class="xn-foot-left"><span>© 2026 XENARY. All rights reserved.</span><span>&middot;</span><span>Made with <span class="xn-foot-heart">&#10084;</span> by XENARY</span></div><div class="xn-foot-studio"><span>สนใจเปิดเว็บติดต่อ <a href="/contact/">XENARY - Studio</a></span></div></div></footer>
 
   <script type="module" src="/assets/js/firebase-client.js?v=20261115-fb1"></script>
-  <script src="/assets/js/site.js?v=20261021-r81"></script>
-  <script src="/assets/js/admin.js?v=20261021-r81"></script>
+  <script src="/assets/js/site.js?v=20261116-u1"></script>
+  <script src="/assets/js/admin.js?v=20261116-u1"></script>
 </body>
 </html>

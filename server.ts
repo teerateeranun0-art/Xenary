@@ -31,6 +31,12 @@ import {
   pruneExpiredSessions,
   extractTrueMoneyVoucherHash,
 } from './src/utils/security';
+import {
+  evaluateDiscountCoupon,
+  computeStoreSummary,
+  computeExtendedAdminAnalytics,
+  maskBuyerName,
+} from './src/utils/store-analytics';
 import { verifyFirebaseIdToken } from './src/lib/firebase-admin';
 import { createStoreAdapter } from './src/db/adapter';
 
@@ -381,6 +387,13 @@ app.get(
       store: settings.site_name || cat.store || 'XENARY',
       online: !settings.maintenance,
       maintenance: Boolean(settings.maintenance),
+      marquee_text: settings.marquee_text || 'เติมเงินซื้อสินค้าแล้ว ไม่มีนโยบาย คืนเงินทุกกรณี  •  จัดส่งคีย์อัตโนมัติ 24 ชั่วโมง',
+      particles_enabled: settings.particles_enabled !== false,
+      hero_title: settings.hero_title || 'XENARY STORE',
+      hero_subtitle: settings.hero_subtitle || 'ร้านบริการจำหน่ายสินค้าดิจิทัลและโปรแกรมคุณภาพ ราคาถูกและปลอดภัย จัดส่งคีย์อัตโนมัติทันที',
+      banner_url: settings.banner_url || '/assets/img/banner.jpg',
+      discord_url: settings.discord_url || '',
+      youtube_url: settings.youtube_url || '',
       uptimeSec: Math.floor(process.uptime()),
       products: products.length,
       updatingCount: products.filter((p) => p.updating || p.status_mode === 'updating').length,
@@ -398,6 +411,36 @@ app.get(
         updatedAt: p.updatedAt || '2026-10-21',
       })),
       updatedAt: new Date().toISOString().slice(0, 10),
+    });
+  })
+);
+
+app.get(
+  '/api/summary',
+  asyncHandler(async (_req, res) => {
+    const [cat, users, orders, keys, settings] = await Promise.all([
+      getCatalogData(),
+      readCollection<User[]>('users.json', []),
+      readCollection<any[]>('orders.json', []),
+      readCollection<any[]>('keys.json', []),
+      readCollection<any>('settings.json', {}),
+    ]);
+    const summary = computeStoreSummary({
+      products: cat.products,
+      users,
+      orders,
+      keys,
+    });
+    res.json({
+      ...summary,
+      site_name: settings.site_name || cat.store || 'XENARY',
+      banner_url: settings.banner_url || '/assets/img/banner.jpg',
+      discord_url: settings.discord_url || '',
+      youtube_url: settings.youtube_url || '',
+      hero_title: settings.hero_title || 'XENARY STORE',
+      hero_subtitle: settings.hero_subtitle || 'ร้านบริการจำหน่ายสินค้าดิจิทัลและโปรแกรมคุณภาพ ราคาถูกและปลอดภัย จัดส่งคีย์อัตโนมัติทันที',
+      marquee_text: settings.marquee_text || 'เติมเงินซื้อสินค้าแล้ว ไม่มีนโยบาย คืนเงินทุกกรณี  •  จัดส่งคีย์อัตโนมัติ 24 ชั่วโมง',
+      particles_enabled: settings.particles_enabled !== false,
     });
   })
 );
@@ -735,16 +778,87 @@ app.get(
   })
 );
 
-// 4. Orders (Protected by Atomic Satang Precision Lock)
+// 4. Orders (Protected by Atomic Satang Precision Lock + Discount Coupon Evaluation)
+app.post(
+  '/api/coupon/validate',
+  asyncHandler(async (req: AuthRequest, res) => {
+    const ip = req.ip || 'unknown';
+    const rlKey = req.user ? `coupon-val:${req.user.id}` : `coupon-val-ip:${ip}`;
+    if (!checkRateLimit(rlKey, 30, 5 * 60 * 1000)) {
+      return res.status(429).json({ valid: false, error: 'rate_limited', message: 'คุณตรวจสอบโค้ดบ่อยเกินไป กรุณารอสักครู่' });
+    }
+
+    const body = req.body || {};
+    const code = String(body.code || '').trim().toUpperCase();
+    if (!code) {
+      return res.status(400).json({ valid: false, error: 'bad_code', message: 'กรุณากรอกรหัสส่วนลด' });
+    }
+
+    const qty = Math.max(1, Math.min(10, Number(body.quantity) || 1));
+    let subtotalSatang: Satang | null = null;
+
+    if (body.product) {
+      const cat = await getCatalogData();
+      const item = cat.products.find((p) => p.slug === body.product || p.id === body.product || p.channel === body.product);
+      if (!item) {
+        return res.status(404).json({ valid: false, error: 'unknown_product', message: 'ไม่พบสินค้าที่เลือก' });
+      }
+      const reqPlan = body.plan ? String(body.plan).trim() : '';
+      const chosenPlan = reqPlan
+        ? (item.plans || []).find((pl: any) => String(pl.label || '').trim() === reqPlan)
+        : item.plans?.[0];
+      if (!chosenPlan) {
+        return res.status(400).json({ valid: false, error: 'unknown_plan', message: 'ไม่พบแพ็กเกจที่เลือก' });
+      }
+      try {
+        subtotalSatang = Satang.fromThb(Number(chosenPlan.price)).checkedMulQty(qty);
+      } catch {
+        subtotalSatang = null;
+      }
+    } else if (body.subtotal != null) {
+      try {
+        subtotalSatang = Satang.fromThb(Number(body.subtotal));
+      } catch {
+        subtotalSatang = null;
+      }
+    }
+
+    if (!subtotalSatang) {
+      return res.status(400).json({ valid: false, error: 'bad_subtotal', message: 'ยอดสั่งซื้อไม่ถูกต้อง' });
+    }
+
+    const [coupons, couponUses] = await Promise.all([
+      readCollection<any[]>('coupons.json', []),
+      readCollection<any[]>('coupon_uses.json', []),
+    ]);
+    const cp = coupons.find((c) => String(c.code || '').trim().toUpperCase() === code);
+    const usedByUserCount = req.user && cp
+      ? couponUses.filter((u) => u.coupon_id === cp.id && u.user_id === req.user!.id).length
+      : 0;
+
+    const result = evaluateDiscountCoupon({
+      coupon: cp,
+      subtotalSatang,
+      usedByUserCount,
+    });
+    if (!result.valid) {
+      return res.status(result.reason === 'not_found' ? 404 : 400).json(result);
+    }
+    return res.json(result);
+  })
+);
+
 app.post(
   '/api/orders',
   requireAuth,
   asyncHandler(async (req, res) => {
-    const { product, plan, quantity = 1, contact } = req.body || {};
+    const { product, plan, quantity = 1, contact, couponCode, discountCode, coupon_code } = req.body || {};
     const qty = Number(quantity);
     if (!Number.isInteger(qty) || qty < 1 || qty > 10) {
       return res.status(400).json({ error: 'bad_quantity', message: 'จำนวนต้องอยู่ระหว่าง 1 ถึง 10 ชิ้น' });
     }
+
+    const rawDiscountCode = String(discountCode ?? couponCode ?? coupon_code ?? '').trim().toUpperCase();
 
     return withLock('ledger', async () => {
       const settings = await readCollection<any>('settings.json', {});
@@ -775,22 +889,49 @@ app.post(
         return res.status(400).json({ error: 'invalid_price', message: 'ราคาแพ็กเกจไม่ถูกต้อง' });
       }
 
-      const totalSatang = unitSatang.checkedMulQty(qty);
-      if (!totalSatang) return res.status(400).json({ error: 'amount_overflow', message: 'ยอดสั่งซื้อเกินขีดจำกัด' });
+      const subtotalSatang = unitSatang.checkedMulQty(qty);
+      if (!subtotalSatang) return res.status(400).json({ error: 'amount_overflow', message: 'ยอดสั่งซื้อเกินขีดจำกัด' });
 
       const users = await readCollection<User[]>('users.json', []);
       const userIndex = users.findIndex((u) => u.id === req.user!.id);
       const user = users[userIndex];
       if (!user) return res.status(404).json({ error: 'user_not_found', message: 'ไม่พบบัญชีผู้ใช้' });
+      if (user.banned) return res.status(403).json({ error: 'banned', message: 'บัญชีของคุณถูกระงับการใช้งาน' });
+
+      let finalTotalSatang = subtotalSatang;
+      let appliedCoupon: any = null;
+      let discountAmountThb = 0;
+      let coupons: any[] | null = null;
+      let couponUses: any[] | null = null;
+
+      if (rawDiscountCode) {
+        [coupons, couponUses] = await Promise.all([
+          readCollection<any[]>('coupons.json', []),
+          readCollection<any[]>('coupon_uses.json', []),
+        ]);
+        const cp = coupons.find((c) => String(c.code || '').trim().toUpperCase() === rawDiscountCode);
+        const usedByUser = cp ? couponUses.filter((u) => u.coupon_id === cp.id && u.user_id === user.id).length : 0;
+        const evalRes = evaluateDiscountCoupon({
+          coupon: cp,
+          subtotalSatang,
+          usedByUserCount: usedByUser,
+        });
+        if (!evalRes.valid) {
+          return res.status(400).json({ error: evalRes.reason || 'invalid_coupon', message: evalRes.message });
+        }
+        appliedCoupon = cp;
+        discountAmountThb = evalRes.discountThb;
+        finalTotalSatang = Satang.fromSatangs(evalRes.finalTotalSatang);
+      }
 
       const userSatang = Satang.fromThb(Number(user.balance) || 0);
-      const newBalSatang = userSatang.checkedSub(totalSatang);
+      const newBalSatang = userSatang.checkedSub(finalTotalSatang);
       if (!newBalSatang) {
         return res.status(402).json({
           error: 'insufficient_balance',
           message: 'ยอดเงินคงเหลือไม่เพียงพอ กรุณาเติมเงินก่อนทำรายการ',
           balance: userSatang.toThb(),
-          need: totalSatang.toThb(),
+          need: finalTotalSatang.toThb(),
         });
       }
 
@@ -845,7 +986,10 @@ app.post(
         plan: { label: chosenPlan.label, per: chosenPlan.per || `/${chosenPlan.label}` },
         unitPrice: unitSatang.toThb(),
         quantity: qty,
-        total: totalSatang.toThb(),
+        subtotal: subtotalSatang.toThb(),
+        discount_code: appliedCoupon ? appliedCoupon.code : null,
+        discount_amount: discountAmountThb,
+        total: finalTotalSatang.toThb(),
         currency: '฿',
         contact: contact ? String(contact).slice(0, 64) : user.username,
         keys_delivered: deliveredKeys,
@@ -856,6 +1000,22 @@ app.post(
 
       const orders = await readCollection<any[]>('orders.json', []);
       orders.push(newOrder);
+
+      if (appliedCoupon && coupons && couponUses) {
+        appliedCoupon.used_count = (Number(appliedCoupon.used_count) || 0) + 1;
+        couponUses.push({
+          id: `CU-${Date.now().toString(36)}-${crypto.randomBytes(2).toString('hex')}`,
+          coupon_id: appliedCoupon.id,
+          code: appliedCoupon.code,
+          coupon_type: 'discount',
+          user_id: user.id,
+          order_id: newOrderId,
+          amount: discountAmountThb,
+          used_at: now,
+        });
+        await writeCollection('coupons.json', coupons);
+        await writeCollection('coupon_uses.json', couponUses);
+      }
 
       await writeCollection('users.json', users);
       await writeCollection('keys.json', allKeys);
@@ -874,18 +1034,27 @@ app.post(
 app.get(
   '/api/orders/recent',
   asyncHandler(async (_req, res) => {
-    const orders = await readCollection<any[]>('orders.json', []);
+    const [orders, cat] = await Promise.all([
+      readCollection<any[]>('orders.json', []),
+      getCatalogData(),
+    ]);
+    const prodImgMap = new Map(cat.products.map((p) => [p.slug || p.id, p.img || '/assets/img/hero.jpg']));
     const list = orders
       .filter((o) => ['paid', 'delivered', 'completed'].includes(o.status))
       .slice(-10)
       .reverse()
-      .map((o) => ({
-        slug: o.product?.slug || o.product?.id,
-        name: escapeHtml(o.product?.name || 'สินค้า'),
-        total: o.total,
-        createdAt: o.createdAt,
-        buyer: escapeHtml(String(o.contact || 'user').slice(0, 3) + '***'),
-      }));
+      .map((o) => {
+        const slug = o.product?.slug || o.product?.id || '';
+        return {
+          slug,
+          name: escapeHtml(o.product?.name || 'สินค้า'),
+          img: prodImgMap.get(slug) || '/assets/img/hero.jpg',
+          plan: escapeHtml(o.plan?.label || ''),
+          total: o.total,
+          createdAt: o.createdAt,
+          buyer: escapeHtml(maskBuyerName(o.contact || o.user || 'User')),
+        };
+      });
     res.json({ count: list.length, orders: list });
   })
 );
@@ -1219,8 +1388,22 @@ app.post(
       if (settings.maintenance || settings.topup_mode === 'disabled') {
         return res.status(503).json({ error: 'topup_disabled', message: 'ระบบเติมเงินและแลกโค้ดปิดให้บริการชั่วคราว' });
       }
-      const cp = coupons.find((c) => c.code === code && c.enabled);
-      if (!cp) return res.status(404).json({ error: 'not_found', message: 'ไม่พบรหัสคูปองนี้หรือคูปองหมดอายุ' });
+      const cp = coupons.find((c) => String(c.code || '').trim().toUpperCase() === code && c.enabled !== false);
+      if (!cp) return res.status(404).json({ error: 'not_found', message: 'ไม่พบรหัสคูปองนี้หรือคูปองถูกปิดใช้งาน' });
+
+      if (cp.coupon_type === 'discount' || Boolean(cp.discount_type)) {
+        return res.status(400).json({
+          error: 'not_credit_coupon',
+          message: 'โค้ดนี้เป็นโค้ดส่วนลดสำหรับสั่งซื้อสินค้า กรุณานำไปกรอกที่หน้ารายละเอียดสินค้าตอนชำระเงิน',
+        });
+      }
+
+      if (cp.expires_at) {
+        const exp = new Date(cp.expires_at);
+        if (!Number.isNaN(exp.getTime()) && exp.getTime() < Date.now()) {
+          return res.status(400).json({ error: 'expired', message: 'คูปองนี้หมดอายุแล้ว' });
+        }
+      }
 
       if (cp.max_uses != null && (Number(cp.used_count) || 0) >= Number(cp.max_uses)) {
         return res.status(400).json({ error: 'coupon_exhausted', message: 'คูปองนี้ถูกใช้งานครบตามจำนวนสิทธิ์แล้ว' });
@@ -1316,6 +1499,31 @@ app.get(
       getCatalogData(),
     ]);
     res.json(computeAdminStats(orders, users, topups, manualTopups, keys, cat.products));
+  })
+);
+
+app.get(
+  '/api/admin/analytics',
+  requireAdmin,
+  asyncHandler(async (_req, res) => {
+    const [orders, users, topups, manualTopups, keys, cat] = await Promise.all([
+      readCollection<any[]>('orders.json', []),
+      readCollection<User[]>('users.json', []),
+      readCollection<any[]>('topups.json', []),
+      readCollection<any[]>('manual_topups.json', []),
+      readCollection<any[]>('keys.json', []),
+      getCatalogData(),
+    ]);
+    res.json(
+      computeExtendedAdminAnalytics({
+        orders,
+        topups,
+        manualTopups,
+        users,
+        products: cat.products,
+        keys,
+      })
+    );
   })
 );
 
@@ -1982,26 +2190,65 @@ app.post(
   '/api/admin/coupons',
   requireAdmin,
   asyncHandler(async (req, res) => {
-    const { code, amount, max_uses, per_user_limit, note } = req.body || {};
+    const {
+      code,
+      amount,
+      coupon_type,
+      discount_type,
+      min_spend,
+      expires_at,
+      max_uses,
+      per_user_limit,
+      note,
+    } = req.body || {};
     const cleanCode = String(code || '').trim().toUpperCase();
-    let amtSatang: Satang;
+    const resolvedCouponType: 'credit' | 'discount' =
+      coupon_type === 'discount' || discount_type ? 'discount' : 'credit';
+    const resolvedDiscountType: 'percent' | 'fixed' | undefined =
+      resolvedCouponType === 'discount'
+        ? discount_type === 'percent'
+          ? 'percent'
+          : 'fixed'
+        : undefined;
+
+    const rawAmt = Number(amount);
+    if (!cleanCode || !Number.isFinite(rawAmt) || rawAmt <= 0) {
+      return res.status(400).json({ error: 'missing_or_invalid_fields', message: 'กรุณาระบุโค้ดและมูลค่ามากกว่า 0' });
+    }
+    if (resolvedDiscountType === 'percent' && (rawAmt < 1 || rawAmt > 100)) {
+      return res.status(400).json({ error: 'invalid_percent', message: 'ส่วนลดเปอร์เซ็นต์ต้องอยู่ระหว่าง 1% ถึง 100%' });
+    }
+    let storedAmount = rawAmt;
     try {
-      amtSatang = Satang.fromThb(Number(amount));
-      if (!cleanCode || amtSatang.amountSatangs <= 0) throw new Error();
+      storedAmount = Satang.fromThb(rawAmt).toThb();
     } catch {
-      return res.status(400).json({ error: 'missing_or_invalid_fields', message: 'กรุณาระบุโค้ดและมูลค่ามากกว่า 0 บาท' });
+      return res.status(400).json({ error: 'invalid_amount', message: 'มูลค่าคูปองไม่ถูกต้อง' });
+    }
+
+    const parsedMinSpend = min_spend != null && min_spend !== '' ? Math.max(0, Number(min_spend) || 0) : 0;
+    let cleanExpiresAt: string | null = null;
+    if (expires_at != null && String(expires_at).trim() !== '') {
+      const dt = new Date(String(expires_at).trim());
+      if (Number.isNaN(dt.getTime())) {
+        return res.status(400).json({ error: 'invalid_expiry', message: 'วันหมดอายุไม่ถูกต้อง' });
+      }
+      cleanExpiresAt = dt.toISOString();
     }
 
     return withLock('ledger', async () => {
       const coupons = await readCollection<any[]>('coupons.json', []);
-      if (coupons.some((c) => c.code === cleanCode)) {
+      if (coupons.some((c) => String(c.code || '').toUpperCase() === cleanCode)) {
         return res.status(409).json({ error: 'duplicate_coupon', message: 'รหัสคูปองนี้มีอยู่แล้ว' });
       }
       const parsedMax = max_uses != null && max_uses !== '' ? Number(max_uses) : null;
       const newCoupon = {
         id: `cp_${Date.now().toString(36)}_${crypto.randomBytes(2).toString('hex')}`,
         code: cleanCode,
-        amount: amtSatang.toThb(),
+        coupon_type: resolvedCouponType,
+        ...(resolvedDiscountType ? { discount_type: resolvedDiscountType } : {}),
+        amount: storedAmount,
+        min_spend: parsedMinSpend,
+        expires_at: cleanExpiresAt,
         max_uses: parsedMax !== null && Number.isInteger(parsedMax) && parsedMax > 0 ? parsedMax : null,
         per_user_limit: Number.isInteger(Number(per_user_limit)) && Number(per_user_limit) > 0 ? Number(per_user_limit) : 1,
         used_count: 0,
@@ -2021,7 +2268,18 @@ app.patch(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { code, amount, max_uses, per_user_limit, note, enabled } = req.body || {};
+    const {
+      code,
+      amount,
+      coupon_type,
+      discount_type,
+      min_spend,
+      expires_at,
+      max_uses,
+      per_user_limit,
+      note,
+      enabled,
+    } = req.body || {};
     return withLock('ledger', async () => {
       const coupons = await readCollection<any[]>('coupons.json', []);
       const c = coupons.find((item) => item.id === id);
@@ -2029,18 +2287,47 @@ app.patch(
       if (code !== undefined) {
         const cleanCode = String(code).trim().toUpperCase();
         if (!cleanCode) return res.status(400).json({ error: 'invalid_code' });
-        if (coupons.some((other) => other.id !== id && other.code === cleanCode)) {
+        if (coupons.some((other) => other.id !== id && String(other.code || '').toUpperCase() === cleanCode)) {
           return res.status(409).json({ error: 'duplicate_coupon', message: 'รหัสคูปองนี้มีอยู่แล้ว' });
         }
         c.code = cleanCode;
       }
+      if (coupon_type !== undefined) {
+        c.coupon_type = coupon_type === 'discount' ? 'discount' : 'credit';
+        if (c.coupon_type === 'credit') delete c.discount_type;
+      }
+      if (discount_type !== undefined) {
+        if (c.coupon_type === 'discount' || coupon_type === 'discount') {
+          c.coupon_type = 'discount';
+          c.discount_type = discount_type === 'percent' ? 'percent' : 'fixed';
+        }
+      }
       if (amount !== undefined) {
-        try {
-          const amt = Satang.fromThb(Number(amount));
-          if (amt.amountSatangs <= 0) throw new Error();
-          c.amount = amt.toThb();
-        } catch {
+        const rawAmt = Number(amount);
+        if (!Number.isFinite(rawAmt) || rawAmt <= 0) {
           return res.status(400).json({ error: 'invalid_amount', message: 'มูลค่าคูปองต้องมากกว่า 0' });
+        }
+        if (c.discount_type === 'percent' && (rawAmt < 1 || rawAmt > 100)) {
+          return res.status(400).json({ error: 'invalid_percent', message: 'ส่วนลดเปอร์เซ็นต์ต้องอยู่ระหว่าง 1% ถึง 100%' });
+        }
+        try {
+          c.amount = Satang.fromThb(rawAmt).toThb();
+        } catch {
+          return res.status(400).json({ error: 'invalid_amount', message: 'มูลค่าคูปองไม่ถูกต้อง' });
+        }
+      }
+      if (min_spend !== undefined) {
+        c.min_spend = min_spend != null && min_spend !== '' ? Math.max(0, Number(min_spend) || 0) : 0;
+      }
+      if (expires_at !== undefined) {
+        if (!expires_at || String(expires_at).trim() === '') {
+          c.expires_at = null;
+        } else {
+          const dt = new Date(String(expires_at).trim());
+          if (Number.isNaN(dt.getTime())) {
+            return res.status(400).json({ error: 'invalid_expiry', message: 'วันหมดอายุไม่ถูกต้อง' });
+          }
+          c.expires_at = dt.toISOString();
         }
       }
       if (max_uses !== undefined) {
@@ -2390,6 +2677,16 @@ app.patch(
       if (body.topup_mode !== undefined) settings.topup_mode = ['direct', 'manual', 'promptpay', 'disabled'].includes(String(body.topup_mode)) ? String(body.topup_mode) : 'direct';
       if (body.banner_url !== undefined) settings.banner_url = String(body.banner_url).trim();
       if (body.discord_url !== undefined) settings.discord_url = String(body.discord_url).trim();
+      if (body.youtube_url !== undefined) {
+        const yt = String(body.youtube_url).trim();
+        if (!yt || isSafeHttpUrl(yt, { allowRelative: false })) {
+          settings.youtube_url = yt;
+        }
+      }
+      if (body.marquee_text !== undefined) settings.marquee_text = String(body.marquee_text).trim().slice(0, 300);
+      if (body.particles_enabled !== undefined) settings.particles_enabled = Boolean(body.particles_enabled);
+      if (body.hero_title !== undefined) settings.hero_title = String(body.hero_title).trim().slice(0, 120);
+      if (body.hero_subtitle !== undefined) settings.hero_subtitle = String(body.hero_subtitle).trim().slice(0, 240);
       if (body.maintenance !== undefined) settings.maintenance = Boolean(body.maintenance);
       settings.updated_at = new Date().toISOString();
       await writeCollection('settings.json', settings);

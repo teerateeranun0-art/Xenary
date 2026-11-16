@@ -408,7 +408,152 @@ impl XenaryEngine {
 }
 
 // ============================================================================
-// 5. UNIT TESTS (Covering All Core Modules & Vulnerabilities)
+// 5. STORE ANALYTICS & DISCOUNT COUPON ENGINE (Synchronized with TypeScript)
+// ============================================================================
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CouponType {
+    Credit,
+    Discount,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DiscountType {
+    Percent,
+    Fixed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscountCoupon {
+    pub id: String,
+    pub code: String,
+    pub coupon_type: CouponType,
+    pub discount_type: Option<DiscountType>,
+    pub amount: f64,
+    pub min_spend_thb: f64,
+    pub max_uses: Option<u32>,
+    pub per_user_limit: u32,
+    pub used_count: u32,
+    pub is_expired: bool,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscountEvalResult {
+    pub valid: bool,
+    pub reason: Option<String>,
+    pub discount_satang: Satang,
+    pub final_total_satang: Satang,
+}
+
+pub fn mask_buyer_name(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return "US****".to_string();
+    }
+    let chars: Vec<char> = trimmed.chars().collect();
+    if chars.len() <= 2 {
+        format!("{}****", chars[0])
+    } else {
+        let prefix: String = chars[..3].iter().collect();
+        format!("{}****", prefix)
+    }
+}
+
+pub fn evaluate_discount_coupon(
+    coupon: Option<&DiscountCoupon>,
+    subtotal: Satang,
+    used_by_user_count: u32,
+) -> DiscountEvalResult {
+    let fail = |reason: &str| DiscountEvalResult {
+        valid: false,
+        reason: Some(reason.to_string()),
+        discount_satang: Satang::ZERO,
+        final_total_satang: subtotal,
+    };
+
+    let cp = match coupon {
+        Some(c) if c.enabled => c,
+        _ => return fail("not_found"),
+    };
+
+    if cp.coupon_type != CouponType::Discount && cp.discount_type.is_none() {
+        return fail("not_discount_coupon");
+    }
+    if cp.is_expired {
+        return fail("expired");
+    }
+    if let Some(max) = cp.max_uses {
+        if cp.used_count >= max {
+            return fail("exhausted");
+        }
+    }
+    if used_by_user_count >= cp.per_user_limit.max(1) {
+        return fail("already_used");
+    }
+    if cp.min_spend_thb > 0.0 {
+        if let Ok(min_sat) = Satang::from_thb(cp.min_spend_thb) {
+            if subtotal < min_sat {
+                return fail("min_spend_not_met");
+            }
+        }
+    }
+    if !cp.amount.is_finite() || cp.amount <= 0.0 {
+        return fail("invalid_discount");
+    }
+
+    let d_type = cp.discount_type.unwrap_or(DiscountType::Fixed);
+    let mut discount_i64 = match d_type {
+        DiscountType::Percent => {
+            let clamped = cp.amount.clamp(0.0, 100.0);
+            ((subtotal.0 as f64 * clamped) / 100.0).floor() as i64
+        }
+        DiscountType::Fixed => Satang::from_thb(cp.amount).map(|s| s.0).unwrap_or(0),
+    };
+    if discount_i64 > subtotal.0 {
+        discount_i64 = subtotal.0;
+    }
+    if discount_i64 < 0 {
+        discount_i64 = 0;
+    }
+    let discount_satang = Satang(discount_i64);
+    let final_total_satang = subtotal.checked_sub(discount_satang).unwrap_or(Satang::ZERO);
+
+    DiscountEvalResult {
+        valid: true,
+        reason: None,
+        discount_satang,
+        final_total_satang,
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoreSummary {
+    pub total_users: usize,
+    pub total_products: usize,
+    pub ready_stock: usize,
+    pub total_sold: u64,
+}
+
+pub fn compute_store_summary(
+    users_count: usize,
+    products_sold: &[u64],
+    unused_keys_count: usize,
+    paid_orders_count: u64,
+) -> StoreSummary {
+    let sum_sold: u64 = products_sold.iter().copied().sum();
+    StoreSummary {
+        total_users: users_count,
+        total_products: products_sold.len(),
+        ready_stock: unused_keys_count,
+        total_sold: sum_sold.max(paid_orders_count),
+    }
+}
+
+// ============================================================================
+// 6. UNIT TESTS (Covering All Core Modules & Vulnerabilities)
 // ============================================================================
 
 #[cfg(test)]
@@ -543,5 +688,39 @@ mod tests {
 
         let stats_json = engine.export_stats_json();
         assert!(stats_json.contains("users_count"));
+    }
+
+    #[test]
+    fn test_discount_coupon_eval_and_mask() {
+        assert_eq!(mask_buyer_name("XenaryDev"), "Xen****");
+        assert_eq!(mask_buyer_name("Ab"), "A****");
+
+        let cp = DiscountCoupon {
+            id: "C1".to_string(),
+            code: "SAVE10".to_string(),
+            coupon_type: CouponType::Discount,
+            discount_type: Some(DiscountType::Percent),
+            amount: 10.0,
+            min_spend_thb: 100.0,
+            max_uses: Some(50),
+            per_user_limit: 1,
+            used_count: 0,
+            is_expired: false,
+            enabled: true,
+        };
+        let ok = evaluate_discount_coupon(Some(&cp), Satang::from_thb(200.0).unwrap(), 0);
+        assert!(ok.valid);
+        assert_eq!(ok.discount_satang.to_thb(), 20.0);
+        assert_eq!(ok.final_total_satang.to_thb(), 180.0);
+
+        let too_low = evaluate_discount_coupon(Some(&cp), Satang::from_thb(50.0).unwrap(), 0);
+        assert!(!too_low.valid);
+        assert_eq!(too_low.reason.as_deref(), Some("min_spend_not_met"));
+
+        let summary = compute_store_summary(120, &[10, 5, 2], 44, 15);
+        assert_eq!(summary.total_users, 120);
+        assert_eq!(summary.total_products, 3);
+        assert_eq!(summary.ready_stock, 44);
+        assert_eq!(summary.total_sold, 17);
     }
 }
