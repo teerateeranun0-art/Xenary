@@ -1,0 +1,160 @@
+{
+  "store": "XENARY",
+  "currency": "THB",
+  "currencySymbol": "฿",
+  "updatedAt": "2026-11-15",
+  "checkout": {
+    "ticket": "/contact/",
+    "note": "Orders land as a Discord ticket until the payment gateway is connected."
+  },
+  "products": [
+    {
+      "slug": "aim-color",
+      "id": "aim-color",
+      "channel": "aim-color",
+      "name": "VAL AIM COLOR",
+      "tag": "Valorant",
+      "desc": "Updated description test",
+      "stock": 2,
+      "sold": 28,
+      "bestSeller": true,
+      "featured": true,
+      "key_based": true,
+      "img": "https://img2.pic.in.th/serifaimcolor3.png",
+      "plans": [
+        {
+          "label": "1 วัน",
+          "price": 59,
+          "per": "/1 วัน"
+        },
+        {
+          "label": "7 วัน",
+          "price": 159,
+          "per": "/7 วัน"
+        },
+        {
+          "label": "30 วัน",
+          "price": 359,
+          "per": "/30 วัน"
+        },
+        {
+          "label": "ถาวร (Lifetime)",
+          "price": 999,
+          "per": "/ถาวร"
+        }
+      ],
+      "download_url": "",
+      "unused_keys": 4,
+      "from": 59,
+      "updating": false,
+      "status_mode": "normal",
+      "update_note": "",
+      "updatedAt": "2026-10-21T14:50:38.366Z"
+    },
+    {
+      "slug": "v0l-external",
+      "id": "v0l-external",
+      "channel": "v0l-external",
+      "name": "VAL External",
+      "tag": "Valorant",
+      "desc": "Valorant external build with instant delivery.",
+      "stock": 1,
+      "sold": 1,
+      "bestSeller": false,
+      "featured": true,
+      "key_based": true,
+      "img": "https://img2.pic.in.th/serifvalopro9a13213f74c94f81.png",
+      "plans": [
+        {
+          "label": "1 วัน",
+          "price": 220,
+          "per": "/วัน",
+          "stock": 1,
+          "plan_keys": 1
+        },
+        {
+          "label": "3 วัน",
+          "price": 480,
+          "per": "/3 วัน",
+          "stock": 0,
+          "plan_keys": 0
+        },
+        {
+          "label": "7 วัน",
+          "price": 790,
+          "per": "/สัปดาห์",
+          "stock": 1,
+          "plan_keys": 1
+        },
+        {
+          "label": "30 วัน",
+          "price": 1590,
+          "per": "/เดือน",
+          "stock": 0,
+          "plan_keys": 0
+        },
+        {
+          "label": "ถาวร (Lifetime)",
+          "price": 3200,
+          "per": "/ถาวร",
+          "stock": 0,
+          "plan_keys": 0
+        }
+      ],
+      "download_url": "",
+      "unused_keys": 2,
+      "from": 220
+    },
+    {
+      "slug": "test",
+      "id": "test",
+      "channel": "test",
+      "name": "test",
+      "tag": "FiveM",
+      "desc": "test",
+      "download_url": "https://gofile.io/d/HcHcoR43",
+      "stock": 2,
+      "sold": 3,
+      "bestSeller": true,
+      "featured": true,
+      "updating": false,
+      "status_mode": "normal",
+      "update_note": "",
+      "updatedAt": "2026-10-21T13:09:39.786Z",
+      "key_based": true,
+      "img": "https://img2.pic.in.th/serifaimcolor3.png",
+      "plans": [
+        {
+          "label": "1 วัน",
+          "price": 59,
+          "per": "/1 วัน",
+          "stock": 3,
+          "plan_keys": 3
+        },
+        {
+          "label": "7 วัน",
+          "price": 159,
+          "per": "/7 วัน",
+          "stock": 0,
+          "plan_keys": 0
+        },
+        {
+          "label": "30 วัน",
+          "price": 359,
+          "per": "/30 วัน",
+          "stock": 0,
+          "plan_keys": 0
+        },
+        {
+          "label": "ถาวร (Lifetime)",
+          "price": 999,
+          "per": "/ถาวร (Lifetime)",
+          "stock": 0,
+          "plan_keys": 0
+        }
+      ],
+      "unused_keys": 3,
+      "from": 59
+    }
+  ]
+}

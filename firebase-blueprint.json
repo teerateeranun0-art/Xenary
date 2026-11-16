@@ -1,0 +1,352 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Public-safe user account record storing role and satang balance without PII.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "username": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 20,
+          "pattern": "^[a-zA-Z0-9_]+$"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["user", "admin"]
+        },
+        "balanceSatangs": {
+          "type": "integer"
+        },
+        "banned": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "username", "role", "balanceSatangs", "banned", "createdAt", "updatedAt"]
+    },
+    "UserPrivateInfo": {
+      "title": "UserPrivateInfo",
+      "description": "Isolated private PII document storing user email.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 254
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "createdAt", "updatedAt"]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Trusted administrator marker document.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "grantedBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "grantedBy", "createdAt"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Digital marketplace product metadata and live inventory status.",
+      "type": "object",
+      "properties": {
+        "slug": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "tag": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "desc": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "fromPriceSatangs": {
+          "type": "integer"
+        },
+        "stock": {
+          "type": "integer"
+        },
+        "sold": {
+          "type": "integer"
+        },
+        "updating": {
+          "type": "boolean"
+        },
+        "updateNote": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "img": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["slug", "name", "tag", "fromPriceSatangs", "stock", "sold", "updating", "updatedAt"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "User purchase order record with satang total and terminal delivery status.",
+      "type": "object",
+      "properties": {
+        "orderId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "productSlug": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "productName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "planLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "quantity": {
+          "type": "integer"
+        },
+        "totalSatangs": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "paid", "delivered", "cancelled"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["orderId", "userId", "productSlug", "productName", "planLabel", "quantity", "totalSatangs", "status", "createdAt"]
+    },
+    "WalletTopup": {
+      "title": "WalletTopup",
+      "description": "Wallet top-up request or completed transaction in integer satangs.",
+      "type": "object",
+      "properties": {
+        "topupId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "method": {
+          "type": "string",
+          "enum": ["promptpay", "truemoney", "slip", "coupon"]
+        },
+        "amountSatangs": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "approved", "completed", "rejected"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["topupId", "userId", "method", "amountSatangs", "status", "createdAt"]
+    },
+    "NewsItem": {
+      "title": "NewsItem",
+      "description": "Store announcement or status update.",
+      "type": "object",
+      "properties": {
+        "newsId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 3000
+        },
+        "badge": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "published": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["newsId", "title", "content", "published", "createdAt"]
+    },
+    "SupportLink": {
+      "title": "SupportLink",
+      "description": "Official support contact channel link.",
+      "type": "object",
+      "properties": {
+        "linkId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "platform": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "handle": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "url": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": ["linkId", "platform", "label", "enabled"]
+    },
+    "ConnectionCheck": {
+      "title": "ConnectionCheck",
+      "description": "Boot-time Firestore connection health document.",
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["ok", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Stores verified user profile metadata with strict role and balance protection."
+    },
+    "/users/{userId}/private/{docId}": {
+      "schema": { "$ref": "#/entities/UserPrivateInfo" },
+      "description": "Isolated PII subcollection storing user email accessible only to owner or admin."
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Admin role authorization documents readable by admins."
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Digital product catalog readable by authenticated or store clients and writable only by admins."
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Purchase orders strictly owned by userId with terminal state protection."
+    },
+    "/topups/{topupId}": {
+      "schema": { "$ref": "#/entities/WalletTopup" },
+      "description": "Wallet top-ups strictly owned by userId and approved only by admins."
+    },
+    "/news/{newsId}": {
+      "schema": { "$ref": "#/entities/NewsItem" },
+      "description": "Store announcements writable only by admins."
+    },
+    "/support_links/{linkId}": {
+      "schema": { "$ref": "#/entities/SupportLink" },
+      "description": "Support channel links writable only by admins."
+    },
+    "/test/{docId}": {
+      "schema": { "$ref": "#/entities/ConnectionCheck" },
+      "description": "Connection verification document."
+    }
+  }
+}

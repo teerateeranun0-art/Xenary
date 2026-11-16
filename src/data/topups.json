@@ -1,0 +1,11 @@
+[
+  {
+    "id": "TM-MWI4L6Q1",
+    "uid": "U5f004713db50",
+    "method": "truemoney",
+    "amount": 100,
+    "voucher": "DEMO_VOUCHER_12345",
+    "status": "completed",
+    "createdAt": "2026-11-15T17:45:42.985Z"
+  }
+]

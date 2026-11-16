@@ -1,0 +1,13 @@
+{
+  "site_name": "XENARY",
+  "truemoney_phone": "0812345678",
+  "promptpay_id": "0812345678",
+  "topup_mode": "direct",
+  "banner_url": "/assets/img/banner.jpg",
+  "discord_url": "https://discord.gg/xenary",
+  "line_url": "",
+  "facebook_url": "",
+  "telegram_url": "",
+  "maintenance": false,
+  "updated_at": "2026-10-21T14:50:40.177Z"
+}

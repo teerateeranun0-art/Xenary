@@ -1,0 +1,604 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>ระบบจัดการหลังบ้าน — XENARY</title>
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#000000">
+  <link rel="icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/src/client/shop/shop.css?v=20261021-r81">
+  <link rel="stylesheet" href="/assets/css/site.css?v=20261021-r81">
+</head>
+<body>
+  <header class="xn-head">
+    <nav class="xn-nav">
+      <a class="xn-brand" href="/">
+        <img src="/assets/img/logo.png" alt="XENARY" width="38" height="38">
+        XENARY
+      </a>
+      <div class="xn-links">
+        <a href="/">หน้าแรก</a>
+        <a href="/products/">สินค้า</a>
+        <a href="/status/">สถานะ</a>
+        <a href="/tos/">เงื่อนไข</a>
+        <a href="/contact/">ติดต่อ</a>
+        <span id="xn-user"></span>
+      </div>
+    </nav>
+  </header>
+
+  <main class="xn-main">
+    <div class="adm-container">
+
+      
+      <div id="adm-login-card" class="xn-pg xn-narrow" hidden>
+        <h1>เข้าสู่ระบบผู้ดูแล</h1>
+        <p class="lead">กรอกรหัส Admin Key หรือเข้าสู่ระบบด้วยบัญชีแอดมินเพื่อเข้าถึงระบบหลังบ้าน</p>
+        <div class="xn-card">
+          <form id="f-adm-login" class="xn-form">
+            <label>รหัสผ่านแอดมิน (ADMIN_KEY)
+              <input id="adm-key-input" type="password" autocomplete="off" placeholder="••••••••••••" required>
+            </label>
+            <p class="xn-msg" id="adm-login-msg" role="alert"></p>
+            <button class="xn-btn" type="submit">ปลดล็อคระบบ</button>
+          </form>
+        </div>
+      </div>
+
+      
+      <div id="adm-main-panel">
+        <div class="adm-header">
+          <div>
+            <h1>ศูนย์ควบคุมระบบ XENARY</h1>
+            <p class="xn-sub">จัดการข้อมูลร้านค้า สินค้า สต็อกคีย์ ตรวจสอบการชำระเงิน และสมาชิกแบบเรียลไทม์</p>
+          </div>
+        </div>
+
+        
+        <div class="adm-nav-wrapper">
+          <button type="button" class="adm-scroll-btn" id="adm-scroll-left" aria-label="เลื่อนซ้าย" title="เลื่อนซ้าย">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+          </button>
+          <nav class="adm-nav-bar" id="adm-nav-bar" role="tablist">
+            <button type="button" class="adm-nav-btn active" data-tab="dashboard">ภาพรวม</button>
+            <button type="button" class="adm-nav-btn" data-tab="products">จัดการสินค้า</button>
+            <button type="button" class="adm-nav-btn" data-tab="keys">สต็อกคีย์สินค้า</button>
+            <button type="button" class="adm-nav-btn" data-tab="topups">รายการเติมเงิน</button>
+            <button type="button" class="adm-nav-btn" data-tab="orders">คำสั่งซื้อ</button>
+            <button type="button" class="adm-nav-btn" data-tab="users">สมาชิก & ยอดเงิน</button>
+            <button type="button" class="adm-nav-btn" data-tab="coupons">คูปองส่วนลด</button>
+            <button type="button" class="adm-nav-btn" data-tab="news">ประกาศข่าวสาร</button>
+            <button type="button" class="adm-nav-btn" data-tab="channels">ช่องทางชำระเงิน</button>
+            <button type="button" class="adm-nav-btn" data-tab="settings">ตั้งค่าระบบ</button>
+          </nav>
+          <button type="button" class="adm-scroll-btn" id="adm-scroll-right" aria-label="เลื่อนขวา" title="เลื่อนขวา">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+          </button>
+        </div>
+
+        
+        <div id="pane-dashboard" class="adm-tab-pane">
+          <div class="adm-stats-grid">
+            <div class="adm-stat-card">
+              <span class="label">รายได้วันนี้</span>
+              <span class="val green" id="st-rev-today">฿0.00</span>
+            </div>
+            <div class="adm-stat-card">
+              <span class="label">รายได้เดือนนี้</span>
+              <span class="val green" id="st-rev-month">฿0.00</span>
+            </div>
+            <div class="adm-stat-card">
+              <span class="label">รายได้รวมทั้งหมด</span>
+              <span class="val green" id="st-rev-total">฿0.00</span>
+            </div>
+            <div class="adm-stat-card">
+              <span class="label">ออเดอร์ที่ชำระแล้ว</span>
+              <span class="val" id="st-orders-paid">0 รายการ</span>
+            </div>
+            <div class="adm-stat-card">
+              <span class="label">สมาชิกทั้งหมด</span>
+              <span class="val" id="st-users">0 บัญชี</span>
+            </div>
+            <div class="adm-stat-card">
+              <span class="label">เติมเงินรอตรวจสอบ</span>
+              <span class="val" id="st-topups-pending">0 รายการ</span>
+            </div>
+            <div class="adm-stat-card">
+              <span class="label">คีย์คงเหลือพร้อมขาย</span>
+              <span class="val" id="st-keys-remain">0 คีย์</span>
+            </div>
+          </div>
+
+          <div class="xn-s6">
+            <div class="xn-card xn-s7">
+              <div class="xn-s8">
+                <h2 class="xn-s4">สรุปสต็อกคีย์แยกตามสินค้า</h2>
+                <button type="button" class="adm-btn sm" id="dash-go-keys">จัดการคลังคีย์ &rarr;</button>
+              </div>
+              <div id="dash-product-stock"></div>
+            </div>
+            <div class="xn-card xn-s7">
+              <div class="xn-s8">
+                <h2 class="xn-s4">คำสั่งซื้อล่าสุด</h2>
+                <button type="button" class="adm-btn sm" id="dash-go-orders">ดูทั้งหมด &rarr;</button>
+              </div>
+              <div id="dash-recent-orders"></div>
+            </div>
+          </div>
+        </div>
+
+        
+        <div id="pane-products" class="adm-tab-pane" hidden>
+          <div class="xn-card" id="prod-form-card">
+            <div class="xn-s9">
+              <h2 class="xn-s4" id="prod-form-title">เพิ่มสินค้าใหม่เข้าหน้าร้าน</h2>
+              <button type="button" id="btn-cancel-edit-prod" class="adm-btn sm" hidden>ยกเลิกการแก้ไข (กลับไปโหมดเพิ่มใหม่)</button>
+            </div>
+            <form id="f-add-product" class="xn-form">
+              <input type="hidden" id="prod-edit-original-slug" value="">
+              <div class="xn-s10">
+                <label>ชื่อสินค้า
+                  <input id="prod-name" placeholder="เช่น VAL AIM COLOR, VALORANT EXTERNAL" required>
+                </label>
+                <label>รหัสสินค้า (Slug ภาษาอังกฤษ — เว้นว่างให้ระบบตั้งอัตโนมัติได้)
+                  <input id="prod-slug" placeholder="เช่น val-aim-color">
+                </label>
+              </div>
+              <div class="xn-s11">
+                <label>หมวดหมู่สินค้า (Category)
+                  <select class="xn-s12" id="prod-tag-select">
+                    <option value="Valorant">Valorant</option>
+                    <option value="FiveM">FiveM</option>
+                    <option value="Account">Account &amp; Skins</option>
+                    <option value="Spoofer">Serials &amp; Bundles</option>
+                    <option value="custom">ระบุหมวดหมู่เอง...</option>
+                  </select>
+                </label>
+                <label id="prod-tag-custom-wrap" hidden>ชื่อหมวดหมู่กำหนดเอง
+                  <input id="prod-tag-custom" placeholder="พิมพ์ชื่อหมวดหมู่">
+                </label>
+                <label>ลิงก์รูปภาพสินค้า (Image URL)
+                  <input id="prod-img" placeholder="https://... หรือ /assets/img/..." value="https://img2.pic.in.th/serifaimcolor3.png">
+                </label>
+                <label>ลิงก์ดาวน์โหลดไฟล์ / โปรแกรม (เว้นว่างได้ถ้าไม่มี)
+                  <input id="prod-download-url" placeholder="เช่น https://mega.nz/... หรือ https://drive.google.com/...">
+                </label>
+              </div>
+
+              <label>รายละเอียดสินค้า
+                <textarea class="xn-s12" id="prod-desc" rows="2" placeholder="คำอธิบายสินค้า ฟีเจอร์เด่น การรับประกัน..."></textarea>
+              </label>
+
+              <div class="xn-s13">
+                <div class="xn-s14">
+                  <label class="xn-chk xn-s15">
+                    <input type="checkbox" id="prod-bestseller"> ติดป้ายขายดีแนะนำ (BEST SELLER)
+                  </label>
+                  <label class="xn-chk xn-s16">
+                    <input type="checkbox" id="prod-updating"> ปิดอัปเดตสินค้าชั่วคราว (Updating / งดสั่งซื้อชั่วคราว)
+                  </label>
+                </div>
+                <label>ข้อความแจ้งเตือนตอนปิดอัปเดต (เว้นว่างได้)
+                  <input id="prod-update-note" placeholder="เช่น กำลังอัปเดตแพตช์ใหม่ รอประมาณ 30 นาที">
+                </label>
+              </div>
+              <div class="xn-s17">
+                <span class="xn-s18">
+                  จำนวนสินค้าคงเหลือจะนับจากจำนวนคีย์พร้อมขายในคลังคีย์โดยอัตโนมัติ
+                </span>
+              </div>
+
+              
+              <div class="adm-plan-builder-box">
+                <div class="adm-plan-builder-head">
+                  <div>
+                    <b class="xn-s19">ตั้งราคาและแพ็กเกจตัวเลือกสินค้า</b>
+                    <div class="xn-s20">ตั้งเป็นราคาเดียว หรือหลายตัวเลือกระยะเวลา (เช่น 1 วัน, 7 วัน, 30 วัน, ถาวร)</div>
+                  </div>
+                  <div class="xn-s21">
+                    <button type="button" class="adm-btn sm" id="btn-plan-single">ตั้งเป็นราคาเดียว</button>
+                    <button type="button" class="adm-btn sm" id="btn-plan-preset">+ เซ็ต 1 วัน / 7 วัน / 30 วัน / ถาวร</button>
+                    <button type="button" class="adm-btn sm primary" id="btn-add-plan-row">+ เพิ่มตัวเลือกราคา</button>
+                  </div>
+                </div>
+                <div class="adm-plan-cols-head">
+                  <span>ชื่อแพ็กเกจ / ระยะเวลา</span>
+                  <span>ราคาขาย (บาท)</span>
+                  <span class="xn-s22">จัดการ</span>
+                </div>
+                <div class="xn-s23" id="prod-plan-rows"></div>
+              </div>
+
+              <p class="xn-msg" id="msg-product"></p>
+              <button class="xn-btn" type="submit" id="btn-submit-product">บันทึกและวางขายสินค้า</button>
+            </form>
+          </div>
+
+          <div class="xn-card">
+            <div class="xn-s8">
+              <h2 class="xn-s4">สินค้าที่วางขายอยู่ในร้านค้า</h2>
+              <span class="xn-s20">กด "แก้ไขข้อมูล" เพื่อปรับราคา สต็อก หรือรายละเอียดย้อนหลังได้ทุกเมื่อ</span>
+            </div>
+            <div id="list-products"></div>
+          </div>
+        </div>
+
+        
+        <div id="pane-keys" class="adm-tab-pane" hidden>
+          <div class="xn-card">
+            <h2>เพิ่มคีย์สินค้าเข้าคลัง (Bulk Import)</h2>
+            <form id="f-add-keys" class="xn-form">
+              <div class="xn-s10">
+                <label>เลือกสินค้าที่จะเพิ่มคีย์
+                  <select class="xn-s12" id="key-product-id" required>
+                    <option value="">-- กรุณาเลือกสินค้า --</option>
+                  </select>
+                </label>
+                <label>แพ็กเกจ / ระยะเวลา (กรุณาเลือกแพ็กเกจที่ต้องการเติมคีย์)
+                  <select class="xn-s12" id="key-plan-label" required>
+                    <option value="">-- กรุณาเลือกแพ็กเกจ --</option>
+                  </select>
+                </label>
+              </div>
+              <label>รายการคีย์ / โค้ดสินค้า (วาง 1 บรรทัดต่อ 1 คีย์)
+                <textarea class="xn-s12" id="key-bulk-text" rows="5" placeholder="KEY-XXXX-1111&#10;KEY-YYYY-2222&#10;KEY-ZZZZ-3333" required></textarea>
+              </label>
+              <label class="xn-chk xn-s15">
+                <input type="checkbox" id="key-sync-stock" checked> อัปเดตจำนวนสต็อกสินค้าให้ตรงกับจำนวนคีย์คงเหลืออัตโนมัติ
+              </label>
+              <p class="xn-msg" id="msg-keys"></p>
+              <button class="xn-btn" type="submit">นำเข้าคีย์เข้าสต็อก</button>
+            </form>
+          </div>
+          <div class="xn-card">
+            <div class="xn-s24">
+              <div>
+                <h2 class="xn-s4">คีย์สินค้าในคลัง (แยกตามสินค้า &amp; แพ็กเกจ)</h2>
+                <span class="xn-s20">แยกหมวดหมู่ตามสินค้าและระยะเวลาแพ็กเกจ พร้อมคัดลอก แก้ไข หรือลบคีย์ได้ทันที</span>
+              </div>
+              <div class="adm-toolbar">
+                <input type="text" id="filter-key-search" class="adm-input-sm xn-s25" placeholder="ค้นหารหัสคีย์ / ออเดอร์...">
+                <select id="filter-key-product" class="adm-select-sm">
+                  <option value="">แสดงแยกตามทุกสินค้า</option>
+                </select>
+                <select id="filter-key-plan" class="adm-select-sm">
+                  <option value="">ทุกแพ็กเกจ</option>
+                </select>
+                <select id="filter-key-status" class="adm-select-sm">
+                  <option value="all">ทุกสถานะ</option>
+                  <option value="unused">พร้อมขายเท่านั้น</option>
+                  <option value="used">ขายแล้วเท่านั้น</option>
+                </select>
+                <button type="button" class="adm-btn sm danger" id="btn-clear-used-keys" title="ลบคีย์ที่ถูกขายไปแล้วออกจากคลัง">ล้างคีย์ที่ขายแล้ว</button>
+              </div>
+            </div>
+            <div id="list-keys"></div>
+          </div>
+        </div>
+
+        
+        <div id="pane-topups" class="adm-tab-pane" hidden>
+          <div class="xn-card">
+            <div class="xn-s9">
+              <h2 class="xn-s4">พร้อมเพย์ QR (PromptPay)</h2>
+              <select id="filter-pp-status" class="adm-select-sm">
+                <option value="pending">รอตรวจสอบ (Pending)</option>
+                <option value="approved">อนุมัติแล้ว (Approved)</option>
+                <option value="rejected">ปฏิเสธแล้ว (Rejected)</option>
+                <option value="all">แสดงทั้งหมด</option>
+              </select>
+            </div>
+            <div id="list-pp-topups"></div>
+          </div>
+          <div class="xn-card">
+            <div class="xn-s9">
+              <h2 class="xn-s4">โอนเงินผ่านธนาคาร &amp; แนบสลิป</h2>
+              <select id="filter-manual-status" class="adm-select-sm">
+                <option value="pending">รอตรวจสอบ (Pending)</option>
+                <option value="approved">อนุมัติแล้ว (Approved)</option>
+                <option value="rejected">ปฏิเสธแล้ว (Rejected)</option>
+                <option value="all">แสดงทั้งหมด</option>
+              </select>
+            </div>
+            <div id="list-manual-topups"></div>
+          </div>
+        </div>
+
+        
+        <div id="pane-orders" class="adm-tab-pane" hidden>
+          <div class="xn-card">
+            <div class="xn-s9">
+              <h2 class="xn-s4">รายการสั่งซื้อทั้งหมด</h2>
+              <div class="adm-toolbar">
+                <input type="text" id="filter-order-search" class="adm-input-sm" placeholder="ค้นหาออเดอร์ / ชื่อลูกค้า / สินค้า...">
+                <select id="filter-order-status" class="adm-select-sm">
+                  <option value="all">ทุกสถานะ</option>
+                  <option value="delivered">ส่งมอบแล้ว</option>
+                  <option value="paid">รอส่งมอบ</option>
+                  <option value="cancelled">ยกเลิก / คืนเงิน</option>
+                </select>
+              </div>
+            </div>
+            <div id="list-orders"></div>
+          </div>
+        </div>
+
+        
+        <div id="pane-users" class="adm-tab-pane" hidden>
+          <div class="xn-card">
+            <div class="xn-s9">
+              <div>
+                <h2 class="xn-s4">บัญชีสมาชิก &amp; จัดการยอดเงิน</h2>
+                <span class="xn-s20">เพิ่มเงิน หักเงิน กำหนดยอดคงเหลือ หรือตั้งสิทธิ์แอดมินได้ทันทีโดยข้อมูลไม่สูญหาย</span>
+              </div>
+              <div class="adm-toolbar">
+                <input type="text" id="filter-user-search" class="adm-input-sm" placeholder="ค้นหาชื่อผู้ใช้ / รหัสสมาชิก...">
+              </div>
+            </div>
+            <div id="list-users"></div>
+          </div>
+        </div>
+
+        
+        <div id="pane-coupons" class="adm-tab-pane" hidden>
+          <div class="xn-card" id="coupon-form-card">
+            <div class="xn-s26">
+              <h2 class="xn-s4" id="cp-form-title">สร้างโค้ดคูปองเครดิตใหม่</h2>
+              <button type="button" id="btn-cancel-edit-cp" class="adm-btn sm" hidden>ยกเลิกการแก้ไข</button>
+            </div>
+            <form id="f-add-coupon" class="xn-form">
+              <input type="hidden" id="cp-edit-id" value="">
+              <div class="xn-s11">
+                <label>รหัสโค้ดคูปอง
+                  <input id="cp-code" placeholder="เช่น FREE50, XENARYVIP" required>
+                </label>
+                <label>มูลค่าเครดิตที่ได้รับ (บาท)
+                  <input id="cp-amount" type="number" min="1" step="0.5" placeholder="50" required>
+                </label>
+              </div>
+              <div class="xn-s11">
+                <label>จำกัดจำนวนครั้งที่ใช้ได้ทั้งหมด (เว้นว่าง = ไม่จำกัด)
+                  <input id="cp-max" type="number" min="1" placeholder="เช่น 100">
+                </label>
+                <label>หมายเหตุ / แคมเปญ
+                  <input id="cp-note" placeholder="เช่น แจกกิจกรรมเปิดร้าน">
+                </label>
+              </div>
+              <p class="xn-msg" id="msg-coupon"></p>
+              <button class="xn-btn" type="submit" id="btn-submit-cp">สร้างคูปอง</button>
+            </form>
+          </div>
+          <div class="xn-card">
+            <h2>คูปองทั้งหมดในระบบ</h2>
+            <div id="list-coupons"></div>
+          </div>
+        </div>
+
+        
+        <div id="pane-news" class="adm-tab-pane" hidden>
+          <div class="xn-card" id="news-form-card">
+            <div class="xn-s26">
+              <h2 class="xn-s4" id="news-form-title">เพิ่มประกาศ / ข่าวสารใหม่</h2>
+              <button type="button" id="btn-cancel-edit-news" class="adm-btn sm" hidden>ยกเลิกการแก้ไข</button>
+            </div>
+            <form id="f-add-news" class="xn-form">
+              <input type="hidden" id="news-edit-id" value="">
+              <label>หัวข้อประกาศ
+                <input id="news-title" placeholder="เช่น อัปเดตแพตช์ใหม่ VALORANT พร้อมใช้งาน" required>
+              </label>
+              <label>ลิงก์รูปภาพประกอบ (ถ้ามี)
+                <input id="news-img" placeholder="https://...">
+              </label>
+              <label>เนื้อหาประกาศ
+                <textarea class="xn-s12" id="news-content" rows="4" placeholder="รายละเอียดข่าวสาร..." required></textarea>
+              </label>
+              <p class="xn-msg" id="msg-news"></p>
+              <button class="xn-btn" type="submit" id="btn-submit-news">เผยแพร่ประกาศ</button>
+            </form>
+          </div>
+          <div class="xn-card">
+            <h2>รายการประกาศข่าวสาร</h2>
+            <div id="list-news"></div>
+          </div>
+        </div>
+
+        
+        <div id="pane-channels" class="adm-tab-pane" hidden>
+          <div class="xn-card" id="ch-form-card">
+            <div class="xn-s26">
+              <h2 class="xn-s4" id="ch-form-title">เพิ่มช่องทางรับชำระเงิน (ธนาคาร / พร้อมเพย์)</h2>
+              <button type="button" id="btn-cancel-edit-ch" class="adm-btn sm" hidden>ยกเลิกการแก้ไข</button>
+            </div>
+            <form id="f-add-channel" class="xn-form">
+              <input type="hidden" id="ch-edit-id" value="">
+              <div class="xn-s11">
+                <label>ชื่อธนาคาร / ช่องทาง
+                  <input id="ch-name" placeholder="เช่น ธนาคารกสิกรไทย (KBank)" required>
+                </label>
+                <label>เลขที่บัญชี / เบอร์พร้อมเพย์
+                  <input id="ch-acc-no" placeholder="เช่น 123-4-56789-0" required>
+                </label>
+              </div>
+              <div class="xn-s11">
+                <label>ชื่อบัญชี
+                  <input id="ch-acc-name" placeholder="เช่น นาย สมชาย ใจดี" required>
+                </label>
+                <label>ลิงก์รูป QR Code (ถ้ามี)
+                  <input id="ch-qr" placeholder="https://...">
+                </label>
+              </div>
+              <p class="xn-msg" id="msg-channel"></p>
+              <button class="xn-btn" type="submit" id="btn-submit-ch">บันทึกช่องทางชำระเงิน</button>
+            </form>
+          </div>
+          <div class="xn-card">
+            <h2>ช่องทางชำระเงินที่เปิดใช้งาน</h2>
+            <div id="list-channels"></div>
+          </div>
+        </div>
+
+        
+        <div id="pane-settings" class="adm-tab-pane" hidden>
+          <div class="xn-card">
+            <h2>ตั้งค่าระบบและหน้าร้านค้า</h2>
+            <form id="f-settings" class="xn-form">
+              <div class="xn-s10">
+                <label>ชื่อเว็บไซต์
+                  <input id="set-site-name" placeholder="XENARY">
+                </label>
+                <label>เบอร์รับซอง TrueMoney Angpao
+                  <input id="set-tm-phone" placeholder="0812345678">
+                </label>
+                <label>เบอร์พร้อมเพย์ / เลขบัตรประชาชน (PromptPay ID)
+                  <input id="set-pp-id" placeholder="0812345678 หรือ 1100000000000">
+                </label>
+              </div>
+              <div class="xn-s10">
+                <label>โหมดการเติมเงิน
+                  <select class="xn-s12" id="set-topup-mode">
+                    <option value="direct">เปิดรับการเติมเงินปกติ (Direct)</option>
+                    <option value="disabled">ปิดระบบเติมเงินชั่วคราว (Disabled)</option>
+                  </select>
+                </label>
+                <label>ลิงก์รูปแบนเนอร์หน้าแรก (Banner URL)
+                  <input id="set-banner-url" placeholder="/assets/img/banner.jpg">
+                </label>
+                <label>ลิงก์ Discord หลัก
+                  <input id="set-discord-url" placeholder="https://discord.gg/...">
+                </label>
+              </div>
+              <label class="xn-chk xn-s27">
+                <input type="checkbox" id="set-maintenance"> เปิดโหมดปิดปรับปรุงเว็บไซต์ชั่วคราว (Maintenance Mode)
+              </label>
+              <p class="xn-msg" id="msg-settings"></p>
+              <button class="xn-btn" type="submit">บันทึกการตั้งค่าทั้งหมด</button>
+            </form>
+          </div>
+
+          <div class="xn-card" id="sup-form-card">
+            <div class="xn-s28">
+              <div>
+                <h2 class="xn-s4" id="sup-form-title">เพิ่มช่องทางติดต่อใหม่ (แสดงในหน้าติดต่อเรา)</h2>
+                <span class="xn-s20">เพิ่มได้ไม่จำกัดช่องทาง เช่น Discord, LINE Official, Facebook Page, Telegram, Instagram, YouTube, TikTok, อีเมล หรือเบอร์โทร</span>
+              </div>
+              <button type="button" class="adm-btn sm danger" id="btn-cancel-edit-sup" hidden>ยกเลิกการแก้ไข</button>
+            </div>
+            <form id="f-add-support" class="xn-form">
+              <input type="hidden" id="sup-edit-id" value="">
+              <div class="xn-s11">
+                <label>แพลตฟอร์ม / ประเภทช่องทาง
+                  <select class="xn-s12" id="sup-platform">
+                    <option value="discord">Discord (เซิร์ฟเวอร์ / Ticket)</option>
+                    <option value="line">LINE Official / LINE ID</option>
+                    <option value="facebook">Facebook Page / Messenger</option>
+                    <option value="telegram">Telegram (กลุ่ม / แชนเนล)</option>
+                    <option value="instagram">Instagram</option>
+                    <option value="youtube">YouTube Channel</option>
+                    <option value="tiktok">TikTok</option>
+                    <option value="email">อีเมล (Email Support)</option>
+                    <option value="phone">เบอร์โทรศัพท์ (Call Center)</option>
+                    <option value="custom">เว็บไซต์ / ช่องทางอื่นๆ</option>
+                  </select>
+                </label>
+                <label>ชื่อหัวข้อช่องทางติดต่อ
+                  <input id="sup-label" placeholder="เช่น Discord Community หรือ LINE Official" required>
+                </label>
+                <label>ไอดี / ชื่อบัญชีที่แสดงบนการ์ด
+                  <input id="sup-handle" placeholder="เช่น @xenary หรือ discord.gg/xenary" required>
+                </label>
+                <label>ป้ายกำกับมุมขวาบน (Badge)
+                  <input id="sup-badge" placeholder="เช่น ออนไลน์ 24 ชม. / ตอบกลับไว" value="ออนไลน์ 24 ชม.">
+                </label>
+              </div>
+              <div class="xn-s29">
+                <label>ลิงก์ URL เมื่อลูกค้ากดปุ่มติดต่อ
+                  <input id="sup-url" placeholder="เช่น https://discord.gg/... หรือ https://line.me/..." required>
+                </label>
+                <label>คำอธิบายสั้นๆ ใต้หัวข้อ
+                  <input id="sup-desc" placeholder="เช่น เปิด Ticket สอบถามหรือแจ้งปัญหาได้ตลอด 24 ชม.">
+                </label>
+              </div>
+              <p class="xn-msg" id="msg-support"></p>
+              <button class="xn-btn" type="submit" id="btn-submit-sup">+ เพิ่มช่องทางติดต่อ</button>
+            </form>
+          </div>
+
+          <div class="xn-card">
+            <h2>รายการช่องทางติดต่อทั้งหมดของร้าน</h2>
+            <div id="list-support-links"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  
+  <div id="modal-adjust-balance" class="adm-modal-backdrop" hidden>
+    <div class="adm-modal-box">
+      <div class="adm-modal-head">
+        <h3 id="bal-modal-title">จัดการยอดเงินสมาชิก</h3>
+        <button type="button" class="adm-btn sm" id="btn-close-bal-modal">ปิด</button>
+      </div>
+      <form id="f-modal-balance" class="xn-form">
+        <input type="hidden" id="bal-modal-uid" value="">
+        <div class="xn-s30">
+          บัญชีผู้ใช้: <b class="xn-s31" id="bal-modal-uname">-</b> &middot; ยอดปัจจุบัน: <b class="xn-s32" id="bal-modal-cur">฿0.00</b>
+        </div>
+        <div class="adm-mode-tabs">
+          <button type="button" class="adm-mode-btn active" data-mode="add">+ เพิ่มเงิน</button>
+          <button type="button" class="adm-mode-btn" data-mode="sub">- หักเงิน</button>
+          <button type="button" class="adm-mode-btn" data-mode="set">= กำหนดยอดใหม่</button>
+        </div>
+        <label id="bal-modal-label">จำนวนเงินที่ต้องการเพิ่ม (บาท)
+          <input type="number" id="bal-modal-input" min="0" step="0.01" placeholder="ระบุจำนวนเงิน เช่น 500" required>
+        </label>
+        <div class="xn-chips" id="bal-quick-chips">
+          <button type="button" data-q="50">50</button>
+          <button type="button" data-q="100">100</button>
+          <button type="button" data-q="300">300</button>
+          <button type="button" data-q="500">500</button>
+          <button type="button" data-q="1000">1,000</button>
+          <button type="button" data-q="5000">5,000</button>
+        </div>
+        <p class="xn-msg" id="msg-modal-bal"></p>
+        <button type="submit" class="xn-btn">ยืนยันการปรับยอดเงิน</button>
+      </form>
+    </div>
+  </div>
+
+  
+  <div id="modal-edit-key" class="adm-modal-backdrop" hidden>
+    <div class="adm-modal-box">
+      <div class="adm-modal-head">
+        <h3>แก้ไขข้อมูลคีย์สินค้า</h3>
+        <button type="button" class="adm-btn sm" id="btn-close-key-modal">ปิด</button>
+      </div>
+      <form id="f-modal-key" class="xn-form">
+        <input type="hidden" id="edit-key-id" value="">
+        <label>สินค้าของคีย์นี้
+          <select class="xn-s33" id="edit-key-prod"></select>
+        </label>
+        <label>แพ็กเกจ / ระยะเวลา
+          <select class="xn-s33" id="edit-key-plan"></select>
+        </label>
+        <label>รหัสคีย์ / โค้ดสินค้า
+          <input type="text" id="edit-key-val" required>
+        </label>
+        <label class="xn-chk xn-s15">
+          <input type="checkbox" id="edit-key-used"> ทำเครื่องหมายว่าคีย์นี้ถูกใช้งาน / ขายไปแล้ว
+        </label>
+        <p class="xn-msg" id="msg-modal-key"></p>
+        <button type="submit" class="xn-btn">บันทึกการแก้ไขคีย์</button>
+      </form>
+    </div>
+  </div>
+
+  <footer class="xn-foot"><div class="xn-foot-inner"><div class="xn-foot-left"><span>© 2026 XENARY. All rights reserved.</span><span>&middot;</span><span>Made with <span class="xn-foot-heart">&#10084;</span> by XENARY</span></div><div class="xn-foot-studio"><span>สนใจเปิดเว็บติดต่อ <a href="/contact/">XENARY - Studio</a></span></div></div></footer>
+
+  <script type="module" src="/assets/js/firebase-client.js?v=20261115-fb1"></script>
+  <script src="/assets/js/site.js?v=20261021-r81"></script>
+  <script src="/assets/js/admin.js?v=20261021-r81"></script>
+</body>
+</html>

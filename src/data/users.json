@@ -1,0 +1,36 @@
+[
+  {
+    "id": "U28fdc5d53a4f",
+    "username": "txz_nakp",
+    "pass": "ed7c492e75dadd8d89b3ad178a29121f:da96d7e06e9db27a1561a13c2ec03bf9a4b49475d9b5e1b602b3289a9813b93f2fdd9d2da1017051cb3c760148d41be0549b3066bc780d98661fda1b8fb85c56",
+    "balance": 2000000000,
+    "created_at": "2026-10-21T09:46:11.129+00:00",
+    "role": "admin",
+    "banned": false,
+    "ban_reason": null,
+    "updated_at": "2026-10-22T14:19:47.54734+00:00",
+    "createdAt": "2026-10-21T09:46:11.129+00:00",
+    "updatedAt": "2026-10-22T14:19:48.043Z"
+  },
+  {
+    "id": "U8cb920d32fef",
+    "username": "XENARY",
+    "pass": "121d47638fbd3c6b07425baa1829767a:3e5d3684642d73e53b69a092c8e37e933b6dec457889f7183ea8338093a66a4e3381d96440b7731505dda901475b9f261b14384447df6b0d797cf240817e5276",
+    "balance": 2000000000,
+    "created_at": "2026-10-21T09:51:37.095+00:00",
+    "role": "admin",
+    "banned": false,
+    "ban_reason": null,
+    "updated_at": "2026-10-21T10:01:44.984+00:00",
+    "createdAt": "2026-10-21T09:51:37.095+00:00"
+  },
+  {
+    "id": "U5f004713db50",
+    "username": "thai_gamer99",
+    "pass": "0cdd5efc242d08a18547690dd9c122c1:ee455c1917d7c7966e0ac01975f051c9c7b401cd6fcb72f05f5a0fd2f6c5fd5951af82bde9809324c14f0b3fa172cca9fd23857bec10f7c859c3b1aaabf2c9ca",
+    "balance": 41,
+    "role": "user",
+    "createdAt": "2026-11-15T17:45:27.012Z",
+    "updatedAt": "2026-11-15T17:45:53.510Z"
+  }
+]

@@ -1,0 +1,14 @@
+[
+  {
+    "id": "sup_discord",
+    "platform": "discord",
+    "label": "Discord Community",
+    "handle": "discord.gg/xenary",
+    "url": "https://discord.gg/xenary",
+    "badge": "ออนไลน์ 24 ชม.",
+    "description": "เปิด Ticket สอบถาม แจ้งปัญหา และรับการซัพพอร์ตจากทีมงานโดยตรง",
+    "enabled": true,
+    "sort_order": 1,
+    "created_at": "2026-10-21T10:59:35.446Z"
+  }
+]

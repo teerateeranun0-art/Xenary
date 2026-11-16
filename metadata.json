@@ -1,0 +1,6 @@
+{
+  "name": "XENARY STORE - Rust-Powered Digital Marketplace",
+  "description": "ร้านค้าจำหน่ายสินค้าดิจิทัล คีย์เกม ซอฟต์แวร์ และบัตรเติมเงิน ขับเคลื่อนด้วย Rust และโครงสร้างความปลอดภัยสูง ปราศจากช่องโหว่และข้อผิดพลาด",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
