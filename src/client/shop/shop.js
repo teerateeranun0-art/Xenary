@@ -759,9 +759,9 @@
           '<div class="inf-inline-qty-row">' +
             '<span>จำนวน</span>' +
             '<div class="inf-inline-qty">' +
-              '<button type="button" id="inf-qty-minus"' + (qty <= 1 || isUpdating ? " disabled" : "") + '>&minus;</button>' +
+              '<button type="button" id="inf-qty-minus" aria-label="ลดจำนวน"' + (qty <= 1 || isUpdating ? " disabled" : "") + '>&minus;</button>' +
               '<b id="inf-qty-val">' + qty + '</b>' +
-              '<button type="button" id="inf-qty-plus"' + (qty >= maxQty || isUpdating ? " disabled" : "") + '>+</button>' +
+              '<button type="button" id="inf-qty-plus" aria-label="เพิ่มจำนวน"' + (qty >= maxQty || isUpdating ? " disabled" : "") + '>+</button>' +
             '</div>' +
           '</div>' +
           '<div class="inf-coupon-box">' +
@@ -1007,9 +1007,9 @@
           '<div class="inf-modal-qty-control">' +
             '<span style="font-size:13px;color:#d4d4d8;">จำนวนที่ต้องการสั่งซื้อ:</span>' +
             '<div style="display:flex;align-items:center;gap:10px;">' +
-              '<button type="button" class="inf-modal-qty-btn" id="inf-m-qty-min"' + (qty <= 1 || isUpdating ? ' disabled' : '') + '>&minus;</button>' +
+              '<button type="button" class="inf-modal-qty-btn" id="inf-m-qty-min" aria-label="ลดจำนวน"' + (qty <= 1 || isUpdating ? ' disabled' : '') + '>&minus;</button>' +
               '<b id="inf-m-qty-val" style="min-width:24px;text-align:center;font-size:15px;color:#fff;">' + qty + '</b>' +
-              '<button type="button" class="inf-modal-qty-btn" id="inf-m-qty-pls"' + (qty >= maxQty || isUpdating ? ' disabled' : '') + '>+</button>' +
+              '<button type="button" class="inf-modal-qty-btn" id="inf-m-qty-pls" aria-label="เพิ่มจำนวน"' + (qty >= maxQty || isUpdating ? ' disabled' : '') + '>+</button>' +
             '</div>' +
           '</div>' +
           '<div class="inf-modal-summary-box">' +

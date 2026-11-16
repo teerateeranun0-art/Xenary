@@ -6,6 +6,8 @@
   var cachedProducts = [];
   var cachedOrders = [];
   var cachedUsers = [];
+  var userStaffOnly = false;
+  var couponFilterMode = "all";
   var balanceModalMode = "add";
   var analyticsRange = "7d";
   var analyticsMetric = "rev";
@@ -191,8 +193,9 @@
       b.classList.toggle("active", isOn);
       if (isOn) activeBtn = b;
     });
+    var paneTarget = tab === "redeem" ? "coupons" : (tab === "staff" ? "users" : tab);
     document.querySelectorAll(".adm-tab-pane").forEach(function (p) {
-      p.hidden = p.id !== "pane-" + tab;
+      p.hidden = p.id !== "pane-" + paneTarget;
     });
 
     var crumb = $("adm-topbar-crumb");
@@ -208,8 +211,33 @@
     else if (tab === "keys") { populateKeyProductDropdowns().then(loadKeys); }
     else if (tab === "topups") { loadPromptPay(); loadManualTopups(); }
     else if (tab === "orders") loadOrders();
-    else if (tab === "users") loadUsers();
-    else if (tab === "coupons") loadCoupons();
+    else if (tab === "staff" || tab === "users") {
+      userStaffOnly = tab === "staff";
+      if ($("users-pane-title")) {
+        $("users-pane-title").textContent = userStaffOnly
+          ? "จัดการสิทธิ์แอดมิน & ทีมงาน"
+          : "บัญชีสมาชิก & จัดการยอดเงิน";
+      }
+      if ($("users-pane-sub")) {
+        $("users-pane-sub").textContent = userStaffOnly
+          ? "รายชื่อทีมงานและแอดมินทั้งหมด (ค้นหาชื่อผู้ใช้เพื่อแต่งตั้งเป็นแอดมินได้ทันที)"
+          : "เพิ่มเงิน หักเงิน กำหนดยอดคงเหลือ หรือตั้งสิทธิ์แอดมินได้ทันทีโดยข้อมูลไม่สูญหาย";
+      }
+      loadUsers();
+    } else if (tab === "coupons" || tab === "redeem") {
+      couponFilterMode = tab === "redeem" ? "credit" : "all";
+      resetCouponForm();
+      if ($("cp-type")) {
+        $("cp-type").value = tab === "redeem" ? "credit" : "discount";
+        syncCouponTypeUi();
+      }
+      if ($("cp-form-title")) {
+        $("cp-form-title").textContent = tab === "redeem"
+          ? "สร้างโค้ดเติมเงินเข้ากระเป๋า (Redeem Code)"
+          : "สร้างโค้ดคูปอง / โค้ดส่วนลดใหม่";
+      }
+      loadCoupons();
+    }
     else if (tab === "news") loadNews();
     else if (tab === "channels") loadChannels();
     else if (tab === "settings") loadSettings();
@@ -1639,6 +1667,7 @@
     if (!box) return;
     var q = $("filter-user-search") ? $("filter-user-search").value.trim().toLowerCase() : "";
     var list = cachedUsers.filter(function (u) {
+      if (userStaffOnly && !q && u.role !== "admin") return false;
       if (!q) return true;
       return String(u.username || "").toLowerCase().indexOf(q) !== -1 ||
              String(u.id || "").toLowerCase().indexOf(q) !== -1;
@@ -1646,7 +1675,7 @@
 
     box.innerHTML = "";
     if (!list.length) {
-      box.innerHTML = '<div class="adm-empty">ไม่พบข้อมูลสมาชิก</div>';
+      box.innerHTML = '<div class="adm-empty">' + (userStaffOnly ? "ยังไม่มีข้อมูลทีมงานหรือแอดมิน" : "ไม่พบข้อมูลสมาชิก") + '</div>';
       return;
     }
 
@@ -1827,11 +1856,17 @@
     try {
       var d = await api("/api/admin/coupons");
       box.innerHTML = "";
-      if (!d.coupons || !d.coupons.length) {
-        box.innerHTML = '<div class="adm-empty">ยังไม่มีคูปองในระบบ</div>';
+      var rows = (d.coupons || []).filter(function (c) {
+        if (couponFilterMode === "credit") {
+          return c.coupon_type !== "discount" && !c.discount_type;
+        }
+        return true;
+      });
+      if (!rows.length) {
+        box.innerHTML = '<div class="adm-empty">' + (couponFilterMode === "credit" ? "ยังไม่มีโค้ดเติมเงินในระบบ" : "ยังไม่มีคูปองในระบบ") + '</div>';
         return;
       }
-      d.coupons.forEach(function (c) {
+      rows.forEach(function (c) {
         var el = document.createElement("div");
         el.className = "adm-item-card";
         var isDiscount = c.coupon_type === "discount" || Boolean(c.discount_type);

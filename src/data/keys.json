@@ -30,6 +30,42 @@
     "used_at": "2026-10-21T13:04:21.720Z"
   },
   {
+    "id": "key_aim_1d_03",
+    "product_id": "aim-color",
+    "plan_label": "1 วัน",
+    "key_value": "XN-AIM-1D-4421-XENR",
+    "is_used": false,
+    "order_id": null,
+    "created_at": "2026-11-16T05:00:00.000Z"
+  },
+  {
+    "id": "key_aim_1d_04",
+    "product_id": "aim-color",
+    "plan_label": "1 วัน",
+    "key_value": "XN-AIM-1D-5590-XENR",
+    "is_used": false,
+    "order_id": null,
+    "created_at": "2026-11-16T05:00:00.000Z"
+  },
+  {
+    "id": "key_aim_7d_02",
+    "product_id": "aim-color",
+    "plan_label": "7 วัน",
+    "key_value": "XN-AIM-7D-6612-XENR",
+    "is_used": false,
+    "order_id": null,
+    "created_at": "2026-11-16T05:00:00.000Z"
+  },
+  {
+    "id": "key_aim_7d_03",
+    "product_id": "aim-color",
+    "plan_label": "7 วัน",
+    "key_value": "XN-AIM-7D-7748-XENR",
+    "is_used": false,
+    "order_id": null,
+    "created_at": "2026-11-16T05:00:00.000Z"
+  },
+  {
     "id": "key_aim_30d_01",
     "product_id": "aim-color",
     "plan_label": "30 วัน",

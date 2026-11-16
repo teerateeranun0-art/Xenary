@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <meta name="theme-color" content="#000000">
   <link rel="icon" href="/favicon.ico">
-  <link rel="stylesheet" href="/src/client/shop/shop.css?v=20261116-u1">
-  <link rel="stylesheet" href="/assets/css/site.css?v=20261116-u1">
+  <link rel="stylesheet" href="/src/client/shop/shop.css?v=20261116-u2">
+  <link rel="stylesheet" href="/assets/css/site.css?v=20261116-u2">
 </head>
 <body>
   <header class="xn-head">
@@ -104,6 +104,10 @@
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
                 <span>ช่องทางชำระเงิน</span>
               </button>
+              <button type="button" class="adm-nav-btn" data-tab="redeem" data-group="Topup">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect width="20" height="5" x="2" y="7"/><line x1="12" x2="12" y1="22" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
+                <span>จัดการโค้ดเติมเงิน</span>
+              </button>
             </div>
 
             <div class="adm-side-group">
@@ -120,6 +124,10 @@
 
             <div class="adm-side-group">
               <div class="adm-side-group-title">System</div>
+              <button type="button" class="adm-nav-btn" data-tab="staff" data-group="System">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                <span>จัดการสิทธิ์แอดมิน</span>
+              </button>
               <button type="button" class="adm-nav-btn" data-tab="users" data-group="System">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                 <span>สมาชิก &amp; ยอดเงิน</span>
@@ -439,8 +447,8 @@
           <div class="xn-card">
             <div class="xn-s9">
               <div>
-                <h2 class="xn-s4">บัญชีสมาชิก &amp; จัดการยอดเงิน</h2>
-                <span class="xn-s20">เพิ่มเงิน หักเงิน กำหนดยอดคงเหลือ หรือตั้งสิทธิ์แอดมินได้ทันทีโดยข้อมูลไม่สูญหาย</span>
+                <h2 class="xn-s4" id="users-pane-title">บัญชีสมาชิก &amp; จัดการยอดเงิน</h2>
+                <span class="xn-s20" id="users-pane-sub">เพิ่มเงิน หักเงิน กำหนดยอดคงเหลือ หรือตั้งสิทธิ์แอดมินได้ทันทีโดยข้อมูลไม่สูญหาย</span>
               </div>
               <div class="adm-toolbar">
                 <input type="text" id="filter-user-search" class="adm-input-sm" placeholder="ค้นหาชื่อผู้ใช้ / รหัสสมาชิก...">
@@ -748,7 +756,7 @@
   <footer class="xn-foot"><div class="xn-foot-inner"><div class="xn-foot-left"><span>© 2026 XENARY. All rights reserved.</span><span>&middot;</span><span>Made with <span class="xn-foot-heart">&#10084;</span> by XENARY</span></div><div class="xn-foot-studio"><span>สนใจเปิดเว็บติดต่อ <a href="/contact/">XENARY - Studio</a></span></div></div></footer>
 
   <script type="module" src="/assets/js/firebase-client.js?v=20261115-fb1"></script>
-  <script src="/assets/js/site.js?v=20261116-u1"></script>
-  <script src="/assets/js/admin.js?v=20261116-u1"></script>
+  <script src="/assets/js/site.js?v=20261116-u2"></script>
+  <script src="/assets/js/admin.js?v=20261116-u2"></script>
 </body>
 </html>
