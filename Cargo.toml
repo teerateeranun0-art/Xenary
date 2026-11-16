@@ -1,0 +1,123 @@
+[package]
+name = "xenary_store"
+version = "1.0.0"
+edition = "2024"
+description = "XENARY Store — 100% Rust Full-Stack E-Commerce Platform (Axum + Leptos + SQLx)"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "xenary_store"
+path = "src/main.rs"
+
+[dependencies]
+# Shared (SSR + WASM Hydrate)
+leptos = "0.8"
+leptos_meta = "0.8"
+leptos_router = "0.8"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+validator = { version = "0.20", features = ["derive"] }
+
+# WASM Frontend (Hydrate)
+console_error_panic_hook = { version = "0.1", optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
+wasm-bindgen-futures = { version = "0.4", optional = true }
+js-sys = { version = "0.3", optional = true }
+gloo-timers = { version = "0.3", features = ["futures"], optional = true }
+web-sys = { version = "0.3", optional = true, features = [
+  "Window",
+  "Document",
+  "Location",
+  "Navigator",
+  "Clipboard",
+  "Storage",
+  "Headers",
+  "Request",
+  "RequestInit",
+  "RequestMode",
+  "RequestCredentials",
+  "Response",
+  "HtmlInputElement",
+  "HtmlSelectElement",
+  "HtmlTextAreaElement",
+  "File",
+  "FileList",
+  "FileReader",
+  "Event",
+  "ProgressEvent",
+] }
+
+# Backend (SSR)
+xenary_rust = { path = "crates/xenary_rust", optional = true }
+axum = { version = "0.8", optional = true }
+leptos_axum = { version = "0.8", optional = true }
+tokio = { version = "1", features = ["full"], optional = true }
+tower = { version = "0.5", optional = true }
+tower-http = { version = "0.6", features = ["fs", "trace", "compression-gzip", "set-header"], optional = true }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "chrono", "json"], optional = true }
+argon2 = { version = "0.5", optional = true }
+scrypt = { version = "0.11", optional = true }
+sha2 = { version = "0.10", optional = true }
+hex = { version = "0.4", optional = true }
+jsonwebtoken = { version = "9", optional = true }
+qrcode = { version = "0.14", default-features = false, features = ["svg"], optional = true }
+chrono = { version = "0.4", features = ["serde"], optional = true }
+rand = { version = "0.8", optional = true }
+dotenvy = { version = "0.15", optional = true }
+tracing = { version = "0.1", optional = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
+
+[features]
+hydrate = [
+  "leptos/hydrate",
+  "dep:console_error_panic_hook",
+  "dep:wasm-bindgen",
+  "dep:wasm-bindgen-futures",
+  "dep:js-sys",
+  "dep:gloo-timers",
+  "dep:web-sys",
+]
+ssr = [
+  "dep:xenary_rust",
+  "dep:axum",
+  "dep:leptos_axum",
+  "dep:tokio",
+  "dep:tower",
+  "dep:tower-http",
+  "dep:sqlx",
+  "dep:argon2",
+  "dep:scrypt",
+  "dep:sha2",
+  "dep:hex",
+  "dep:jsonwebtoken",
+  "dep:qrcode",
+  "dep:chrono",
+  "dep:rand",
+  "dep:dotenvy",
+  "dep:tracing",
+  "dep:tracing-subscriber",
+  "leptos/ssr",
+  "leptos_meta/ssr",
+  "leptos_router/ssr",
+]
+
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[package.metadata.leptos]
+output-name = "xenary_store"
+site-root = "target/site"
+site-pkg-dir = "pkg"
+style-file = "style/main.css"
+bin-features = ["ssr"]
+bin-default-features = false
+lib-features = ["hydrate"]
+lib-default-features = false
+hash-files = false
