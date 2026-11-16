@@ -14,15 +14,14 @@
     if (el) el.addEventListener(ev, fn);
   }
   function getKey() {
-    return sessionStorage.getItem("xn_admin") || localStorage.getItem("xn_admin") || "";
+    return sessionStorage.getItem("xn_admin") || "";
   }
   function setKey(k) {
+    try { localStorage.removeItem("xn_admin"); } catch (e) {}
     if (k) {
       sessionStorage.setItem("xn_admin", k);
-      localStorage.setItem("xn_admin", k);
     } else {
       sessionStorage.removeItem("xn_admin");
-      localStorage.removeItem("xn_admin");
     }
   }
   function headers() {
@@ -36,6 +35,14 @@
     return String(v == null ? "" : v).replace(/[&<>"']/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
+  }
+
+  function safeUrl(rawUrl, allowMailTel) {
+    var u = String(rawUrl || "").trim();
+    if (!u || /^\/\//.test(u)) return "";
+    if (/^(https?:\/\/|\/)/i.test(u)) return u;
+    if (allowMailTel && /^(mailto:|tel:)/i.test(u)) return u;
+    return "";
   }
 
   function money(v) {
@@ -426,10 +433,12 @@
           })
           .join("");
 
+        var safeImg = safeUrl(p.img);
+        var safeDl = safeUrl(p.download_url);
         var isUpdating = Boolean(p.updating || p.status_mode === "updating");
         el.innerHTML =
           '<div style="display:flex;align-items:flex-start;gap:14px;flex:1;min-width:260px;">' +
-            (p.img ? '<img src="' + esc(p.img) + '" alt="" width="64" height="64" style="border-radius:10px;object-fit:cover;border:1px solid var(--sx-border);background:#111;flex-shrink:0;">' : "") +
+            (safeImg ? '<img src="' + esc(safeImg) + '" alt="" width="64" height="64" style="border-radius:10px;object-fit:cover;border:1px solid var(--sx-border);background:#111;flex-shrink:0;">' : "") +
             '<div class="adm-item-info" style="flex:1;">' +
               '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
                 '<b style="font-size:15px;">' + esc(p.name) + '</b>' +
@@ -438,7 +447,7 @@
                   ? '<span class="adm-badge warning" style="text-transform:none;">กำลังปิดอัปเดต' + (p.update_note ? " (" + esc(p.update_note) + ")" : "") + '</span>'
                   : '<span class="adm-badge ok" style="text-transform:none;">เปิดขายปกติ</span>') +
                 (p.bestSeller ? '<span class="adm-tag" style="background:rgba(239,68,68,0.16);color:#f87171;border-color:rgba(239,68,68,0.3);">BEST SELLER</span>' : "") +
-                (p.download_url ? '<a href="' + esc(p.download_url) + '" target="_blank" rel="noopener" class="adm-tag" style="background:rgba(16,185,129,0.14);color:#34d399;border-color:rgba(16,185,129,0.3);text-decoration:none;">มีลิงก์ดาวน์โหลด</a>' : "") +
+                (safeDl ? '<a href="' + esc(safeDl) + '" target="_blank" rel="noopener noreferrer" class="adm-tag" style="background:rgba(16,185,129,0.14);color:#34d399;border-color:rgba(16,185,129,0.3);text-decoration:none;">มีลิงก์ดาวน์โหลด</a>' : "") +
               '</div>' +
               '<div class="adm-sub" style="margin-top:4px;">' +
                 'รหัสสินค้า: <code>' + esc(p.slug) + '</code> &middot; คีย์คงเหลือพร้อมขาย: <span class="adm-highlight">' + (p.stock ?? 0) + '</span> คีย์ &middot; ขายแล้ว: ' + (p.sold || 0) + ' ครั้ง' +
@@ -1193,7 +1202,7 @@
       d.topups.forEach(function (t) {
         var isPending = t.status === "pending";
         var badgeCls = t.status === "approved" ? "ok" : (isPending ? "warning" : "danger");
-        var isImgSlip = t.slip_url && (/^data:image\//i.test(t.slip_url) || /^https?:\/\//i.test(t.slip_url));
+        var isImgSlip = t.slip_url && (/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(t.slip_url) || /^https?:\/\//i.test(t.slip_url));
         var el = document.createElement("div");
         el.className = "adm-item-card";
         el.innerHTML =
@@ -1880,12 +1889,15 @@
       list.forEach(function (item) {
         var el = document.createElement("div");
         el.className = "adm-item-card";
+        var safeSupUrl = safeUrl(item.url, true);
         el.innerHTML =
           '<div class="adm-item-info">' +
             '<b>' + esc(item.label) + '</b> ' +
             '<span class="adm-tag" style="text-transform:uppercase;">' + esc(item.platform || "custom") + '</span> ' +
             '<span class="adm-badge ' + (item.enabled !== false ? "ok" : "used") + '">' + (item.enabled !== false ? "แสดงผล" : "ซ่อนไว้") + '</span>' +
-            '<div class="adm-sub">ไอดี/บัญชี: <span class="adm-highlight">' + esc(item.handle || "-") + '</span> &middot; ลิงก์: <a href="' + esc(item.url || "#") + '" target="_blank" rel="noopener" style="color:#60a5fa;">' + esc(item.url || "-") + '</a></div>' +
+            '<div class="adm-sub">ไอดี/บัญชี: <span class="adm-highlight">' + esc(item.handle || "-") + '</span> &middot; ลิงก์: ' +
+              (safeSupUrl ? '<a href="' + esc(safeSupUrl) + '" target="_blank" rel="noopener noreferrer" style="color:#60a5fa;">' + esc(safeSupUrl) + '</a>' : '<span style="color:#71717a;">-</span>') +
+            '</div>' +
             (item.description ? '<div class="adm-sub">' + esc(item.description) + '</div>' : "") +
           '</div>' +
           '<div class="adm-actions">' +

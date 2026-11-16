@@ -185,3 +185,194 @@ export function generatePromptpayPayload(phoneOrId: string, amountSatangs?: Sata
   const crc = promptpayCrc16(body);
   return body + crc;
 }
+
+// ============================================================================
+// 4. URL, SLUG, & PAYLOAD SANITIZATION + PURE ADMIN ANALYTICS/FILTER HELPERS
+// ============================================================================
+
+export function isSafeHttpUrl(
+  rawUrl: string,
+  options: { allowRelative?: boolean; allowMailTel?: boolean } = {}
+): boolean {
+  const { allowRelative = true, allowMailTel = false } = options;
+  if (typeof rawUrl !== 'string') return false;
+  const trimmed = rawUrl.trim();
+  if (!trimmed || trimmed.length > 2048) return false;
+  if (/[\u0000-\u001F\u007F]/.test(trimmed)) return false;
+
+  if (allowRelative && trimmed.startsWith('/') && !trimmed.startsWith('//')) {
+    return true;
+  }
+
+  if (allowMailTel) {
+    if (/^mailto:[^\s<>"{}|\\^`]+@[^\s<>"{}|\\^`]+\.[^\s<>"{}|\\^`]+$/i.test(trimmed)) {
+      return true;
+    }
+    if (/^tel:[0-9+*#-]{3,24}$/i.test(trimmed)) {
+      return true;
+    }
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+export function isSafeSlipUrl(rawUrl: string): boolean {
+  if (typeof rawUrl !== 'string') return false;
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return false;
+  if (/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/i.test(trimmed)) {
+    return trimmed.length <= 8 * 1024 * 1024;
+  }
+  return isSafeHttpUrl(trimmed, { allowRelative: true, allowMailTel: false });
+}
+
+export function isValidProductSlug(slug: string): boolean {
+  if (typeof slug !== 'string') return false;
+  return /^[a-z0-9][a-z0-9_-]{1,63}$/i.test(slug.trim());
+}
+
+export interface SanitizedPlan {
+  label: string;
+  price: number;
+  per: string;
+}
+
+export function sanitizePlans(rawPlans: unknown): SanitizedPlan[] {
+  if (!Array.isArray(rawPlans)) return [];
+  const out: SanitizedPlan[] = [];
+  for (const item of rawPlans) {
+    if (!item || typeof item !== 'object') continue;
+    const raw = item as Record<string, unknown>;
+    const label = String(raw.label ?? '').trim().slice(0, 64);
+    const numPrice = Number(raw.price);
+    if (!label || !Number.isFinite(numPrice) || numPrice <= 0) continue;
+    try {
+      const priceSatang = Satang.fromThb(numPrice);
+      if (priceSatang.amountSatangs <= 0) continue;
+      const per = typeof raw.per === 'string' && raw.per.trim() ? raw.per.trim().slice(0, 32) : `/${label}`;
+      out.push({ label, price: priceSatang.toThb(), per });
+    } catch {
+      continue;
+    }
+  }
+  return out;
+}
+
+export function filterAndEnrichKeys(
+  keys: any[],
+  products: any[],
+  query: {
+    product_id?: string;
+    plan_label?: string;
+    status?: string;
+    q?: string;
+  } = {}
+): any[] {
+  const prodIdFilter = String(query.product_id || '').trim();
+  const planFilter = String(query.plan_label || '').trim();
+  const statusFilter = String(query.status || 'all').trim().toLowerCase();
+  const q = String(query.q || '').trim().toLowerCase();
+
+  const prodById = new Map<string, any>();
+  for (const p of products || []) {
+    if (p?.slug) prodById.set(String(p.slug), p);
+    if (p?.id) prodById.set(String(p.id), p);
+  }
+
+  return (keys || [])
+    .filter((k) => {
+      if (prodIdFilter) {
+        const matchedProd = prodById.get(prodIdFilter);
+        const targetIds = matchedProd
+          ? new Set([String(matchedProd.slug || ''), String(matchedProd.id || '')].filter(Boolean))
+          : new Set([prodIdFilter]);
+        if (!targetIds.has(String(k.product_id || ''))) return false;
+      }
+      if (planFilter === '__any__') {
+        if (k.plan_label) return false;
+      } else if (planFilter) {
+        if (String(k.plan_label || '').toLowerCase() !== planFilter.toLowerCase()) return false;
+      }
+      if (statusFilter === 'unused' && k.is_used) return false;
+      if (statusFilter === 'used' && !k.is_used) return false;
+      if (q) {
+        const hay = `${k.key_value || ''} ${k.product_id || ''} ${k.plan_label || ''} ${k.order_id || ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    })
+    .reverse()
+    .slice(0, 500)
+    .map((k) => {
+      const p = prodById.get(String(k.product_id || ''));
+      return {
+        ...k,
+        product_name: p?.name || k.product_name || k.product_id,
+        product_tag: p?.tag || k.product_tag || 'General',
+        product_img: p?.img || k.product_img || '',
+      };
+    });
+}
+
+export function computeAdminStats(
+  orders: any[],
+  users: any[],
+  topups: any[],
+  manualTopups: any[],
+  keys: any[],
+  products: any[],
+  now: Date = new Date()
+) {
+  const paidStatuses = new Set(['paid', 'delivered', 'completed']);
+  const bangkokNow = new Date(now.getTime() + 7 * 3600 * 1000);
+  const todayStr = bangkokNow.toISOString().slice(0, 10);
+  const monthStr = bangkokNow.toISOString().slice(0, 7);
+
+  let revTotalSatangs = 0;
+  let revTodaySatangs = 0;
+  let revMonthSatangs = 0;
+  let paidCount = 0;
+
+  for (const o of orders || []) {
+    if (!paidStatuses.has(String(o?.status || '').toLowerCase())) continue;
+    paidCount += 1;
+    let orderSatang = 0;
+    try {
+      orderSatang = Satang.fromThb(Number(o.total) || 0).amountSatangs;
+    } catch {
+      orderSatang = 0;
+    }
+    revTotalSatangs += orderSatang;
+
+    const ts = o.paidAt || o.createdAt || o.created_at;
+    if (ts) {
+      const d = new Date(ts);
+      if (!Number.isNaN(d.getTime())) {
+        const bkk = new Date(d.getTime() + 7 * 3600 * 1000).toISOString();
+        if (bkk.slice(0, 10) === todayStr) revTodaySatangs += orderSatang;
+        if (bkk.slice(0, 7) === monthStr) revMonthSatangs += orderSatang;
+      }
+    }
+  }
+
+  const pendingCount =
+    (topups || []).filter((t) => t.status === 'pending' || t.status === 'processing').length +
+    (manualTopups || []).filter((t) => t.status === 'pending').length;
+
+  return {
+    revenue_today: revTodaySatangs / 100,
+    revenue_month: revMonthSatangs / 100,
+    revenue_total: revTotalSatangs / 100,
+    paid_orders_count: paidCount,
+    total_users: (users || []).length,
+    pending_topups_count: pendingCount,
+    unused_keys_count: (keys || []).filter((k) => !k.is_used).length,
+    products_count: (products || []).length,
+  };
+}
+

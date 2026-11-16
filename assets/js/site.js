@@ -145,8 +145,9 @@ function initDiscordStatus() {
     .then(function (d) {
       var links = (d && Array.isArray(d.links)) ? d.links : [];
       var discordItem = links.filter(function (x) { return x.platform === "discord"; })[0];
-      if (d && d.discord_url) DISCORD_URL = d.discord_url;
-      else if (discordItem && discordItem.url) DISCORD_URL = discordItem.url;
+      var candidateDiscord = (d && d.discord_url) ? d.discord_url : ((discordItem && discordItem.url) ? discordItem.url : "");
+      var safeDiscord = candidateDiscord ? safeContactUrl(candidateDiscord, "discord") : "#";
+      if (safeDiscord && safeDiscord !== "#") DISCORD_URL = safeDiscord;
 
       renderContactCards(links);
 
@@ -154,6 +155,7 @@ function initDiscordStatus() {
         if (DISCORD_URL) {
           a.href = DISCORD_URL;
           a.target = "_blank";
+          a.rel = "noopener noreferrer";
           a.removeAttribute("aria-disabled");
         }
       });
