@@ -51,6 +51,12 @@
     });
   }
 
+  function safeImgUrl(url, fallback) {
+    var u = String(url || "").trim();
+    if (/^(https?:\/\/|\/(?!\/))/i.test(u)) return u;
+    return fallback || "/assets/img/hero.jpg";
+  }
+
   function getPriceRangeText(p) {
     var plans = Array.isArray(p.plans) && p.plans.length ? p.plans : [];
     if (!plans.length) {
@@ -82,7 +88,7 @@
       if (cached) state.currentUser = JSON.parse(cached);
     } catch (e) {}
 
-    return fetch("/api/auth/me", { cache: "no-store" })
+    return fetch("/api/auth/me", { cache: "no-store", credentials: "same-origin" })
       .then(function (r) { return r.json(); })
       .then(function (d) {
         state.currentUser = d.user || null;
@@ -167,7 +173,7 @@
     // Left Box: Category Showcase with indicator dots
     var leftCard = document.createElement("div");
     leftCard.className = "inf-cat-showcase-card";
-    var bgImg = (featProd && featProd.img) || "https://img2.pic.in.th/serifvalopro9a13213f74c94f81.png";
+    var bgImg = safeImgUrl(featProd && featProd.img, "https://img2.pic.in.th/serifvalopro9a13213f74c94f81.png");
     var dotsHtml = tags
       .map(function (t, idx) {
         return '<button type="button" class="inf-dot' + (idx === state.showcaseIdx ? " active" : "") + '" data-idx="' + idx + '" aria-label="' + escapeHtml(t) + '"></button>';
@@ -204,7 +210,7 @@
       rightCard.className = "inf-feat-prod-card";
       rightCard.innerHTML =
         '<div class="inf-feat-left">' +
-          '<img src="' + escapeHtml(featProd.img || bgImg) + '" alt="' + escapeHtml(featProd.name) + '" class="inf-feat-thumb">' +
+          '<img src="' + escapeHtml(safeImgUrl(featProd.img, bgImg)) + '" alt="' + escapeHtml(featProd.name) + '" class="inf-feat-thumb">' +
           '<div class="inf-feat-info">' +
             '<h3>' + escapeHtml(featProd.name) + '</h3>' +
             '<div class="inf-feat-price">' + escapeHtml(getPriceRangeText(featProd)) + '</div>' +
@@ -275,7 +281,9 @@
   }
 
   function timeAgo(iso) {
-    var s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+    var ts = new Date(iso).getTime();
+    if (!Number.isFinite(ts)) return "เมื่อสักครู่";
+    var s = Math.max(0, (Date.now() - ts) / 1000);
     if (s < 3600) return Math.max(1, Math.floor(s / 60)) + " นาทีที่แล้ว";
     if (s < 86400) return Math.floor(s / 3600) + " ชั่วโมงที่แล้ว";
     return Math.floor(s / 86400) + " วันที่แล้ว";
@@ -301,7 +309,7 @@
           el.className = "sx-order-card";
           el.style.cursor = "pointer";
           el.innerHTML =
-            '<div class="sx-order-thumb">' + (p.img ? '<img src="' + escapeHtml(p.img) + '" alt="" loading="lazy">' : "") + '</div>' +
+            '<div class="sx-order-thumb">' + (p.img ? '<img src="' + escapeHtml(safeImgUrl(p.img)) + '" alt="" loading="lazy">' : "") + '</div>' +
             '<div class="sx-order-info">' +
               '<strong>' + escapeHtml(o.name) + '</strong>' +
               '<span>ราคา ' + Number(o.total).toFixed(2) + ' บาท</span>' +
@@ -332,7 +340,7 @@
 
     card.innerHTML =
       '<div class="product-img">' +
-        '<img src="' + escapeHtml(p.img || "https://img2.pic.in.th/serifvalopro9a13213f74c94f81.png") + '" alt="' + escapeHtml(p.name) + '" loading="lazy">' +
+        '<img src="' + escapeHtml(safeImgUrl(p.img, "https://img2.pic.in.th/serifvalopro9a13213f74c94f81.png")) + '" alt="' + escapeHtml(p.name) + '" loading="lazy">' +
         (isUpdating
           ? '<span class="inf-updating-tag">' +
               '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>' +
@@ -562,7 +570,7 @@
       '<div class="inf-detail-grid">' +
         '<div class="inf-detail-left">' +
           '<div class="inf-detail-img-box">' +
-            '<img src="' + escapeHtml(p.img || "https://img2.pic.in.th/serifvalopro9a13213f74c94f81.png") + '" alt="' + escapeHtml(p.name) + '">' +
+            '<img src="' + escapeHtml(safeImgUrl(p.img, "https://img2.pic.in.th/serifvalopro9a13213f74c94f81.png")) + '" alt="' + escapeHtml(p.name) + '">' +
           '</div>' +
           '<div class="inf-safety-card">' +
             '<div class="inf-safety-label">' +
@@ -736,7 +744,7 @@
             '<span>ยืนยันการสั่งซื้อ</span>' +
           '</h3>' +
           '<div class="inf-modal-item-preview">' +
-            '<img src="' + escapeHtml(product.img || "https://img2.pic.in.th/serifvalopro9a13213f74c94f81.png") + '" class="inf-modal-item-thumb" alt="' + escapeHtml(product.name) + '">' +
+            '<img src="' + escapeHtml(safeImgUrl(product.img, "https://img2.pic.in.th/serifvalopro9a13213f74c94f81.png")) + '" class="inf-modal-item-thumb" alt="' + escapeHtml(product.name) + '">' +
             '<div style="min-width:0;flex:1;">' +
               '<div style="font-size:11px;font-weight:700;color:#a1a1aa;text-transform:uppercase;">' + escapeHtml(product.tag || "VALORANT") + '</div>' +
               '<strong style="font-size:15px;color:#fff;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(product.name) + '</strong>' +
@@ -792,11 +800,7 @@
 
       var closeBtn = backdrop.querySelector("#inf-m-close");
       if (closeBtn) {
-        closeBtn.addEventListener("click", function () {
-          backdrop.remove();
-          document.removeEventListener("keydown", onEscKey);
-          document.body.style.overflow = "";
-        });
+        closeBtn.addEventListener("click", closePopupModal);
       }
 
       if (user) {
@@ -806,6 +810,7 @@
             curIdx = parseInt(this.value, 10) || 0;
             state.selectedPlanIdx = curIdx;
             updateModalContent();
+            state.orderQty = qty;
           });
         }
         var btnMin = backdrop.querySelector("#inf-m-qty-min");
@@ -832,21 +837,24 @@
     updateModalContent();
     document.body.style.overflow = "hidden";
 
+    function closePopupModal() {
+      backdrop.remove();
+      document.removeEventListener("keydown", onEscKey);
+      document.body.style.overflow = "";
+    }
+
     function onEscKey(e) {
       if (e.key === "Escape") {
-        backdrop.remove();
-        document.removeEventListener("keydown", onEscKey);
-        document.body.style.overflow = "";
+        closePopupModal();
       }
     }
     document.addEventListener("keydown", onEscKey);
     backdrop.addEventListener("click", function (e) {
       if (e.target === backdrop) {
-        backdrop.remove();
-        document.removeEventListener("keydown", onEscKey);
-        document.body.style.overflow = "";
+        closePopupModal();
       }
     });
+    backdrop._closeModal = closePopupModal;
     document.body.appendChild(backdrop);
   }
 
@@ -859,6 +867,7 @@
 
     fetch("/api/orders", {
       method: "POST",
+      credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         product: product.slug || product.id,
@@ -867,13 +876,18 @@
       }),
     })
       .then(function (r) {
-        return r.json().then(function (j) {
+        return r.json().catch(function () { return {}; }).then(function (j) {
           if (!r.ok) throw j;
           return j;
         });
       })
       .then(function (order) {
-        backdrop.remove();
+        if (typeof backdrop._closeModal === "function") {
+          backdrop._closeModal();
+        } else {
+          backdrop.remove();
+          document.body.style.overflow = "";
+        }
         if (window.XenaryFirebase && typeof window.XenaryFirebase.syncOrderToFirestore === "function") {
           window.XenaryFirebase.syncOrderToFirestore(order).catch(function () {});
         }
@@ -905,6 +919,7 @@
 
     fetch("/api/orders", {
       method: "POST",
+      credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         product: product.slug || product.id,
@@ -913,7 +928,7 @@
       }),
     })
       .then(function (r) {
-        return r.json().then(function (j) {
+        return r.json().catch(function () { return {}; }).then(function (j) {
           if (!r.ok) throw j;
           return j;
         });
@@ -959,7 +974,7 @@
         '</div>';
     }
     var rawDlUrl = String(order.download_url || (order.product && order.product.download_url) || product.download_url || "").trim();
-    var dlUrl = /^(https?:\/\/|\/)/i.test(rawDlUrl) ? rawDlUrl : "";
+    var dlUrl = /^(https?:\/\/|\/(?!\/))/i.test(rawDlUrl) ? rawDlUrl : "";
     var dlHtml = dlUrl
       ? '<a href="' + escapeHtml(dlUrl) + '" target="_blank" rel="noopener noreferrer" class="sx-m-submit" style="margin-bottom:8px;background:#10b981;color:#000!important;">ดาวน์โหลดไฟล์ / โปรแกรม (Download)</a>'
       : "";

@@ -136,9 +136,19 @@ function resolveSslOption(
   return { rejectUnauthorized: false };
 }
 
+export function parseBoundedInt(raw: string | undefined, fallback: number, min: number, max: number): number {
+  const cleaned = cleanEnv(raw);
+  if (!cleaned) return fallback;
+  const num = Number(cleaned);
+  if (!Number.isFinite(num)) return fallback;
+  const int = Math.floor(num);
+  if (int < min || int > max) return fallback;
+  return int;
+}
+
 export function buildPgPoolConfig(env: NodeJS.ProcessEnv = process.env): PoolConfig {
   const connStr = getPostgresConnectionString(env);
-  const max = Number(cleanEnv(env.PG_POOL_MAX)) || 10;
+  const max = parseBoundedInt(env.PG_POOL_MAX, 10, 1, 100);
 
   if (connStr) {
     return {
@@ -151,7 +161,7 @@ export function buildPgPoolConfig(env: NodeJS.ProcessEnv = process.env): PoolCon
   }
 
   const host = cleanEnv(env.PGHOST) || cleanEnv(env.SQL_HOST) || '127.0.0.1';
-  const port = Number(cleanEnv(env.PGPORT) || cleanEnv(env.SQL_PORT)) || 5432;
+  const port = parseBoundedInt(env.PGPORT || env.SQL_PORT, 5432, 1, 65535);
   const user = cleanEnv(env.PGUSER) || cleanEnv(env.SQL_USER) || 'postgres';
   const password = cleanEnv(env.PGPASSWORD) || cleanEnv(env.SQL_PASSWORD) || '';
   const database = cleanEnv(env.PGDATABASE) || cleanEnv(env.SQL_DB_NAME) || 'postgres';

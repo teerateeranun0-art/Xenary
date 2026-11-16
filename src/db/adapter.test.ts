@@ -10,6 +10,7 @@ import {
 } from './config';
 import {
   COLLECTION_SPECS,
+  chunkArray,
   normalizeCatalogPayload,
   productToRow,
   rowToProduct,
@@ -161,6 +162,36 @@ test('row mappers preserve types and normalize PostgreSQL numeric/bigint strings
   assert.equal(sOut.h, 'tokhash');
   assert.equal(sOut.exp, 1790000000000);
   assert.equal(typeof sOut.exp, 'number');
+
+  const mtSpec = COLLECTION_SPECS['manual_topups.json'];
+  const mtRow = mtSpec.toRow({
+    id: 'MT-1',
+    user_id: 'U1',
+    username: 'alice',
+    channel_id: 'kbank',
+    channel_name: 'KBank',
+    amount: 300,
+    status: 'rejected',
+    admin_note: 'สลิปไม่ชัดเจน',
+  });
+  assert.equal(mtRow.admin_note, 'สลิปไม่ชัดเจน');
+  const mtOut = mtSpec.fromRow({ ...mtRow, amount: '300.00' });
+  assert.equal(mtOut.admin_note, 'สลิปไม่ชัดเจน');
+  assert.equal(mtOut.amount, 300);
+
+  const topupSpec = COLLECTION_SPECS['topups.json'];
+  const tRow = topupSpec.toRow({
+    id: 'PP-1',
+    uid: 'U1',
+    method: 'promptpay',
+    amount: 100,
+    status: 'pending',
+    expiresAt: 1790000000000,
+  });
+  const tOut = topupSpec.fromRow({ ...tRow, extra: JSON.stringify(tRow.extra) });
+  assert.equal(tOut.expiresAt, 1790000000000);
+
+  assert.deepEqual(chunkArray([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
 });
 
 test('UnifiedStore JSON fallback supports atomic read/write and catalog helpers', async () => {
@@ -229,5 +260,56 @@ test('supabase/schema.sql defines all 13 tables and enables RLS', () => {
       `Expected RLS enabled on ${tbl}`
     );
   }
+  assert.ok(sql.includes('admin_note TEXT'), 'Expected manual_topups.admin_note in schema.sql');
   assert.equal(normalizeCatalogPayload([]).store, 'XENARY');
+});
+
+test('blank PostgreSQL .env values fall back cleanly to json and parseBoundedInt clamps invalid pool/port values', async () => {
+  const { parseBoundedInt } = await import('./config');
+  const { buildMultiRowUpsertQuery } = await import('./mappers');
+
+  const blankPgEnv: NodeJS.ProcessEnv = {
+    DB_DRIVER: 'auto',
+    DATABASE_URL: '',
+    PGHOST: '',
+    PGPORT: '5432',
+    PGUSER: '',
+    PGPASSWORD: '',
+    PGDATABASE: '',
+    PGSSL: 'auto',
+    PG_POOL_MAX: '10',
+  };
+  assert.deepEqual(resolveDbConfig(blankPgEnv), {
+    driver: 'json',
+    hasPostgres: false,
+    hasSupabase: false,
+  });
+
+  assert.equal(parseBoundedInt('25', 10, 1, 100), 25);
+  assert.equal(parseBoundedInt('-5', 10, 1, 100), 10);
+  assert.equal(parseBoundedInt('999999', 5432, 1, 65535), 5432);
+  assert.equal(parseBoundedInt('abc', 5432, 1, 65535), 5432);
+
+  const poolCfg = buildPgPoolConfig({
+    PGHOST: '127.0.0.1',
+    PGPORT: '99999',
+    PG_POOL_MAX: '-10',
+  });
+  assert.equal(poolCfg.port, 5432);
+  assert.equal(poolCfg.max, 10);
+
+  const built = buildMultiRowUpsertQuery({
+    table: 'product_keys',
+    columns: ['id', 'product_id', 'key_value', 'is_used'],
+    conflictTarget: 'id',
+    rows: [
+      { id: 'k1', product_id: 'p1', key_value: 'KEY-1', is_used: false },
+      { id: 'k2', product_id: 'p1', key_value: 'KEY-2', is_used: true },
+    ],
+    jsonbColumns: new Set(['extra']),
+    doNothing: false,
+  });
+  assert.ok(built.sql.includes('VALUES ($1, $2, $3, $4), ($5, $6, $7, $8)'));
+  assert.ok(built.sql.includes('ON CONFLICT (id) DO UPDATE SET product_id = EXCLUDED.product_id'));
+  assert.deepEqual(built.values, ['k1', 'p1', 'KEY-1', false, 'k2', 'p1', 'KEY-2', true]);
 });

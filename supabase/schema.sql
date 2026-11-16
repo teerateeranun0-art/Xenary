@@ -113,8 +113,11 @@ CREATE TABLE IF NOT EXISTS manual_topups (
   slip_url TEXT,
   qr_payload TEXT,
   status TEXT NOT NULL DEFAULT 'pending',
+  admin_note TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE manual_topups ADD COLUMN IF NOT EXISTS admin_note TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_manual_topups_user_id ON manual_topups (user_id);
 

@@ -13,6 +13,8 @@ import { buildPgPoolConfig } from './config';
 import {
   COLLECTION_SPECS,
   PRODUCT_COLUMNS,
+  buildMultiRowUpsertQuery,
+  chunkArray,
   normalizeCatalogPayload,
   productToRow,
   rowToProduct,
@@ -33,14 +35,6 @@ const JSONB_COLUMNS = new Set([
   'keys_delivered',
   'payload',
 ]);
-
-function serializePgValue(col: string, val: any): any {
-  if (val === undefined) return null;
-  if (JSONB_COLUMNS.has(col)) {
-    return val === null ? null : JSON.stringify(val);
-  }
-  return val;
-}
 
 export type SeedReader = <T>(name: string, fallback: T) => T;
 
@@ -117,8 +111,15 @@ export class PostgresStore {
               updatedAt: catalog.updatedAt,
               checkout: catalog.checkout,
             });
-            for (const p of catalog.products) {
-              await this.upsertRow(client, 'products', PRODUCT_COLUMNS, 'id', productToRow(p), true);
+            if (catalog.products.length > 0) {
+              await this.upsertRows(
+                client,
+                'products',
+                PRODUCT_COLUMNS,
+                'id',
+                catalog.products.map(productToRow),
+                true
+              );
             }
             const settings = this.readSeed<Record<string, any>>('settings.json', {});
             if (settings && Object.keys(settings).length > 0) {
@@ -127,17 +128,15 @@ export class PostgresStore {
             for (const name of SEED_COLLECTIONS) {
               const spec = COLLECTION_SPECS[name];
               const items = this.readSeed<any[]>(name, []);
-              if (Array.isArray(items)) {
-                for (const item of items) {
-                  await this.upsertRow(
-                    client,
-                    spec.table,
-                    spec.columns,
-                    spec.conflictTarget,
-                    spec.toRow(item),
-                    true
-                  );
-                }
+              if (Array.isArray(items) && items.length > 0) {
+                await this.upsertRows(
+                  client,
+                  spec.table,
+                  spec.columns,
+                  spec.conflictTarget,
+                  items.map((item) => spec.toRow(item)),
+                  true
+                );
               }
             }
             await client.query('COMMIT');
@@ -172,27 +171,26 @@ export class PostgresStore {
     );
   }
 
-  private async upsertRow(
+  private async upsertRows(
     client: PoolClient,
     table: string,
     columns: readonly string[],
     conflictTarget: string,
-    row: Record<string, any>,
+    rows: Record<string, any>[],
     doNothing = false
   ): Promise<void> {
-    const placeholders = columns.map((col, idx) =>
-      JSONB_COLUMNS.has(col) ? `$${idx + 1}::jsonb` : `$${idx + 1}`
-    );
-    const values = columns.map((col) => serializePgValue(col, row[col]));
-    const conflictClause = doNothing
-      ? `ON CONFLICT (${conflictTarget}) DO NOTHING`
-      : `ON CONFLICT (${conflictTarget}) DO UPDATE SET ${columns
-          .filter((c) => c !== conflictTarget)
-          .map((c) => `${c} = EXCLUDED.${c}`)
-          .join(', ')}`;
-
-    const sql = `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders.join(', ')}) ${conflictClause}`;
-    await client.query(sql, values);
+    if (!rows.length) return;
+    for (const batch of chunkArray(rows, 100)) {
+      const { sql, values } = buildMultiRowUpsertQuery({
+        table,
+        columns,
+        conflictTarget,
+        rows: batch,
+        jsonbColumns: JSONB_COLUMNS,
+        doNothing,
+      });
+      await client.query(sql, values);
+    }
   }
 
   private async syncTableRows(
@@ -209,9 +207,7 @@ export class PostgresStore {
         await client.query(`DELETE FROM ${table}`);
       } else {
         await client.query(`DELETE FROM ${table} WHERE ${conflictTarget} <> ALL($1::text[])`, [ids]);
-        for (const row of rows) {
-          await this.upsertRow(client, table, columns, conflictTarget, row, false);
-        }
+        await this.upsertRows(client, table, columns, conflictTarget, rows, false);
       }
       await client.query('COMMIT');
     } catch (err) {
@@ -294,9 +290,7 @@ export class PostgresStore {
             await client.query('DELETE FROM products');
           } else {
             await client.query('DELETE FROM products WHERE id <> ALL($1::text[])', [ids]);
-            for (const row of rows) {
-              await this.upsertRow(client, 'products', PRODUCT_COLUMNS, 'id', row, false);
-            }
+            await this.upsertRows(client, 'products', PRODUCT_COLUMNS, 'id', rows, false);
           }
           await client.query('COMMIT');
         } catch (err) {

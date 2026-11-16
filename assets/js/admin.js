@@ -785,9 +785,10 @@
 
         var headEl = document.createElement("div");
         headEl.className = "adm-key-group-head";
+        var safeGroupImg = safeUrl(g.img);
         headEl.innerHTML =
           '<div class="adm-key-group-title">' +
-            (g.img ? '<img src="' + esc(g.img) + '" alt="" class="adm-key-group-thumb">' : "") +
+            (safeGroupImg ? '<img src="' + esc(safeGroupImg) + '" alt="" class="adm-key-group-thumb">' : "") +
             '<div>' +
               '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
                 '<b style="font-size:16px;color:#fff;">' + esc(g.name) + '</b>' +
@@ -945,7 +946,9 @@
 
                 row.querySelector('[data-act="copy"]').addEventListener("click", function () {
                   var btn = this;
-                  if (navigator.clipboard) navigator.clipboard.writeText(k.key_value);
+                  if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+                    navigator.clipboard.writeText(k.key_value).catch(function () {});
+                  }
                   btn.textContent = "คัดลอกแล้ว";
                   setTimeout(function () { btn.textContent = "คัดลอก"; }, 1200);
                 });
@@ -1226,15 +1229,37 @@
 
         if (isImgSlip) {
           var openSlipPreview = function () {
-            var w = window.open("", "_blank", "noopener,noreferrer");
-            if (w && w.document) {
-              w.document.title = "สลิปโอนเงิน — " + String(t.username || "");
-              w.document.body.style.cssText = "margin:0;background:#09090b;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;box-sizing:border-box";
-              var previewEl = w.document.createElement("img");
-              previewEl.src = t.slip_url;
-              previewEl.style.cssText = "max-width:100%;max-height:92vh;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.8)";
-              w.document.body.appendChild(previewEl);
-            }
+            var existing = document.getElementById("adm-slip-lightbox");
+            if (existing) existing.remove();
+            var overlay = document.createElement("div");
+            overlay.id = "adm-slip-lightbox";
+            overlay.setAttribute("role", "dialog");
+            overlay.setAttribute("aria-modal", "true");
+            overlay.setAttribute("aria-label", "ดูรูปสลิปโอนเงิน");
+            overlay.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;box-sizing:border-box";
+            var closeBtn = document.createElement("button");
+            closeBtn.type = "button";
+            closeBtn.textContent = "ปิดหน้าต่าง ✕";
+            closeBtn.style.cssText = "margin-bottom:14px;padding:8px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.25);background:#18181b;color:#fff;font:inherit;font-size:13px;cursor:pointer";
+            var previewEl = document.createElement("img");
+            previewEl.src = t.slip_url;
+            previewEl.alt = "สลิปโอนเงิน " + String(t.username || "");
+            previewEl.style.cssText = "max-width:100%;max-height:82vh;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.8);border:1px solid rgba(255,255,255,.15)";
+            var closePreview = function () {
+              document.removeEventListener("keydown", onEsc);
+              overlay.remove();
+            };
+            var onEsc = function (ev) {
+              if (ev.key === "Escape") closePreview();
+            };
+            closeBtn.addEventListener("click", closePreview);
+            overlay.addEventListener("click", function (ev) {
+              if (ev.target === overlay) closePreview();
+            });
+            document.addEventListener("keydown", onEsc);
+            overlay.appendChild(closeBtn);
+            overlay.appendChild(previewEl);
+            document.body.appendChild(overlay);
           };
           var btnSlip = el.querySelector(".btn-view-slip");
           var imgSlip = el.querySelector(".btn-view-slip-img");
@@ -1352,7 +1377,9 @@
       el.querySelectorAll("code.adm-key-code").forEach(function (cEl) {
         cEl.addEventListener("click", function () {
           var txt = cEl.textContent;
-          if (navigator.clipboard) navigator.clipboard.writeText(txt);
+          if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+            navigator.clipboard.writeText(txt).catch(function () {});
+          }
           cEl.textContent = "คัดลอกแล้ว!";
           setTimeout(function () { cEl.textContent = txt; }, 1200);
         });
@@ -1605,17 +1632,31 @@
           $("coupon-form-card").scrollIntoView({ behavior: "smooth", block: "start" });
         });
         el.querySelector('[data-act="toggle"]').addEventListener("click", async function () {
-          await api("/api/admin/coupons/" + encodeURIComponent(c.id), {
-            method: "PATCH",
-            body: JSON.stringify({ enabled: !c.enabled }),
-          });
-          loadCoupons();
+          var btn = this;
+          btn.disabled = true;
+          try {
+            await api("/api/admin/coupons/" + encodeURIComponent(c.id), {
+              method: "PATCH",
+              body: JSON.stringify({ enabled: !c.enabled }),
+            });
+            loadCoupons();
+          } catch (err) {
+            alert("เปลี่ยนสถานะคูปองไม่สำเร็จ: " + err.message);
+            btn.disabled = false;
+          }
         });
         el.querySelector('[data-act="del"]').addEventListener("click", async function () {
           if (!confirm("ต้องการลบคูปอง " + c.code + " ใช่หรือไม่?")) return;
-          await api("/api/admin/coupons/" + encodeURIComponent(c.id), { method: "DELETE" });
-          if ($("cp-edit-id").value === String(c.id)) resetCouponForm();
-          loadCoupons();
+          var btn = this;
+          btn.disabled = true;
+          try {
+            await api("/api/admin/coupons/" + encodeURIComponent(c.id), { method: "DELETE" });
+            if ($("cp-edit-id").value === String(c.id)) resetCouponForm();
+            loadCoupons();
+          } catch (err) {
+            alert("ลบคูปองไม่สำเร็จ: " + err.message);
+            btn.disabled = false;
+          }
         });
         box.appendChild(el);
       });
@@ -1708,9 +1749,16 @@
         });
         el.querySelector('[data-act="del"]').addEventListener("click", async function () {
           if (!confirm("ต้องการลบประกาศนี้ใช่หรือไม่?")) return;
-          await api("/api/admin/news/" + encodeURIComponent(n.id), { method: "DELETE" });
-          if ($("news-edit-id").value === String(n.id)) resetNewsForm();
-          loadNews();
+          var btn = this;
+          btn.disabled = true;
+          try {
+            await api("/api/admin/news/" + encodeURIComponent(n.id), { method: "DELETE" });
+            if ($("news-edit-id").value === String(n.id)) resetNewsForm();
+            loadNews();
+          } catch (err) {
+            alert("ลบประกาศไม่สำเร็จ: " + err.message);
+            btn.disabled = false;
+          }
         });
         box.appendChild(el);
       });
@@ -1801,9 +1849,16 @@
         });
         el.querySelector('[data-act="del"]').addEventListener("click", async function () {
           if (!confirm("ต้องการลบช่องทาง '" + c.name + "' ใช่หรือไม่?")) return;
-          await api("/api/admin/channels/" + encodeURIComponent(c.id), { method: "DELETE" });
-          if ($("ch-edit-id").value === String(c.id)) resetChannelForm();
-          loadChannels();
+          var btn = this;
+          btn.disabled = true;
+          try {
+            await api("/api/admin/channels/" + encodeURIComponent(c.id), { method: "DELETE" });
+            if ($("ch-edit-id").value === String(c.id)) resetChannelForm();
+            loadChannels();
+          } catch (err) {
+            alert("ลบช่องทางไม่สำเร็จ: " + err.message);
+            btn.disabled = false;
+          }
         });
         box.appendChild(el);
       });
@@ -1921,18 +1976,32 @@
         });
 
         el.querySelector('[data-act="toggle"]').addEventListener("click", async function () {
-          await api("/api/admin/support-links/" + encodeURIComponent(item.id), {
-            method: "PATCH",
-            body: JSON.stringify({ enabled: item.enabled === false }),
-          });
-          loadSupportLinks();
+          var btn = this;
+          btn.disabled = true;
+          try {
+            await api("/api/admin/support-links/" + encodeURIComponent(item.id), {
+              method: "PATCH",
+              body: JSON.stringify({ enabled: item.enabled === false }),
+            });
+            loadSupportLinks();
+          } catch (err) {
+            alert("เปลี่ยนสถานะช่องทางติดต่อไม่สำเร็จ: " + err.message);
+            btn.disabled = false;
+          }
         });
 
         el.querySelector('[data-act="del"]').addEventListener("click", async function () {
           if (!confirm("ต้องการลบช่องทางติดต่อ '" + item.label + "' ใช่หรือไม่?")) return;
-          await api("/api/admin/support-links/" + encodeURIComponent(item.id), { method: "DELETE" });
-          if ($("sup-edit-id").value === String(item.id)) resetSupportForm();
-          loadSupportLinks();
+          var btn = this;
+          btn.disabled = true;
+          try {
+            await api("/api/admin/support-links/" + encodeURIComponent(item.id), { method: "DELETE" });
+            if ($("sup-edit-id").value === String(item.id)) resetSupportForm();
+            loadSupportLinks();
+          } catch (err) {
+            alert("ลบช่องทางติดต่อไม่สำเร็จ: " + err.message);
+            btn.disabled = false;
+          }
         });
 
         box.appendChild(el);

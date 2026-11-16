@@ -23,6 +23,7 @@
     opt = opt || {};
     var o = {
       method: opt.method || "GET",
+      credentials: "same-origin",
       headers: Object.assign({ "Content-Type": "application/json" }, opt.headers || {}),
       cache: "no-store",
     };
@@ -74,10 +75,12 @@
 
   var TS = {
     approved: ["สำเร็จ", "ok"],
+    completed: ["สำเร็จ", "ok"],
     pending: ["รอตรวจสอบ", "wait"],
     processing: ["กำลังตรวจสอบ", "wait"],
     rejected: ["ไม่สำเร็จ", "no"],
     cancelled: ["ยกเลิก", "no"],
+    expired: ["หมดอายุ", "no"],
   };
   var OS = {
     paid: ["ชำระแล้ว", "wait"],
@@ -205,6 +208,7 @@
           methodLabel: "โอนผ่านธนาคาร (" + (mt.channel_name || "ธนาคาร") + ")",
           amount: mt.amount,
           status: mt.status,
+          adminNote: mt.admin_note || "",
           createdAt: mt.created_at,
         };
       }));
@@ -227,7 +231,7 @@
         item.innerHTML =
           '<div class="inf-th-left">' +
             '<strong>' + esc(t.methodLabel) + '</strong>' +
-            '<small>' + esc(when(t.createdAt)) + '</small>' +
+            '<small>' + esc(when(t.createdAt)) + (t.adminNote ? ' &middot; หมายเหตุ: ' + esc(t.adminNote) : '') + '</small>' +
           '</div>' +
           '<div class="inf-th-right">' +
             '<b class="inf-th-amt">' + esc(moneyExact(t.amount)) + '</b>' +
@@ -303,7 +307,9 @@
             kBtn.title = "คลิกเพื่อคัดลอกคีย์";
             kBtn.textContent = kv;
             kBtn.addEventListener("click", function () {
-              if (navigator.clipboard) navigator.clipboard.writeText(kv);
+              if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+                navigator.clipboard.writeText(kv).catch(function () {});
+              }
               kBtn.textContent = "คัดลอกแล้ว ✓";
               kBtn.classList.add("copied");
               setTimeout(function () {
@@ -321,7 +327,7 @@
 
         // 7. Download
         var tdDl = document.createElement("td");
-        var safeDl = o.download_url && /^(https?:\/\/|\/)/i.test(String(o.download_url).trim()) ? String(o.download_url).trim() : "";
+        var safeDl = o.download_url && /^(https?:\/\/|\/(?!\/))/i.test(String(o.download_url).trim()) ? String(o.download_url).trim() : "";
         if (safeDl) {
           var dlA = document.createElement("a");
           dlA.href = safeDl;
@@ -449,6 +455,12 @@
      SLIP IMAGE COMPRESSION HELPER (Canvas -> Compact DataURL)
      ============================================================ */
   function readAndCompressImage(file, callback) {
+    if (!file || !file.type || file.type.indexOf("image/") !== 0 || file.type === "image/svg+xml") {
+      return callback(new Error("กรุณาเลือกไฟล์รูปภาพ PNG, JPG หรือ WEBP เท่านั้น"));
+    }
+    if (file.size > 12 * 1024 * 1024) {
+      return callback(new Error("ขนาดไฟล์รูปภาพต้องไม่เกิน 12 MB"));
+    }
     var reader = new FileReader();
     reader.onload = function (ev) {
       var img = new Image();
@@ -456,6 +468,9 @@
         var maxDim = 900;
         var w = img.width;
         var h = img.height;
+        if (!w || !h) {
+          return callback(new Error("ไม่สามารถอ่านขนาดรูปภาพนี้ได้"));
+        }
         if (w > maxDim || h > maxDim) {
           if (w > h) {
             h = Math.round((h * maxDim) / w);
@@ -469,6 +484,9 @@
         canvas.width = w;
         canvas.height = h;
         var ctx = canvas.getContext("2d");
+        if (!ctx) {
+          return callback(new Error("เบราว์เซอร์ไม่รองรับการประมวลผลรูปภาพ"));
+        }
         ctx.drawImage(img, 0, 0, w, h);
         var dataUrl = canvas.toDataURL("image/jpeg", 0.82);
         callback(null, dataUrl);
@@ -538,7 +556,12 @@
       document.addEventListener("click", function (e) {
         var a = e.target.closest("a");
         if (!a || !a.href) return;
-        var u = new URL(a.href, location.origin);
+        var u;
+        try {
+          u = new URL(a.href, location.origin);
+        } catch (err) {
+          return;
+        }
         if (u.origin === location.origin && u.pathname.replace(/\/+$/, "") === "/account" && location.pathname.replace(/\/+$/, "") === "/account") {
           e.preventDefault();
           history.pushState({}, "", u.pathname + u.search);
@@ -553,6 +576,13 @@
       });
     }
 
+    if (!document.body.dataset.boundPayEsc) {
+      document.body.dataset.boundPayEsc = "1";
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape") closeAllPayModals();
+      });
+    }
+
     // 1. PromptPay Form & QR Actions
     once("f-pp", function (f) {
       var m = f.querySelector(".xn-msg");
@@ -563,6 +593,12 @@
           chips.forEach(function (x) { x.classList.toggle("on", x === b); });
         });
       });
+      if (f.amount) {
+        f.amount.addEventListener("input", function () {
+          var v = String(f.amount.value || "").trim();
+          chips.forEach(function (x) { x.classList.toggle("on", x.dataset.amt === v); });
+        });
+      }
       f.addEventListener("submit", function (e) {
         e.preventDefault();
         var submit = f.querySelector('button[type="submit"]');
@@ -611,7 +647,7 @@
         }
         if (b.disabled) return;
         b.disabled = true;
-        api("/api/wallet/promptpay/" + ppId + "/cancel", { method: "POST", body: {} })
+        api("/api/wallet/promptpay/" + encodeURIComponent(ppId) + "/cancel", { method: "POST", body: {} })
           .then(function () {
             stopPP();
             if ($("pp-result")) $("pp-result").hidden = true;
@@ -633,7 +669,7 @@
       b.addEventListener("click", function () {
         if (!ppId || b.disabled) return;
         b.disabled = true;
-        api("/api/wallet/promptpay/" + ppId + "/simulate", { method: "POST", body: {} })
+        api("/api/wallet/promptpay/" + encodeURIComponent(ppId) + "/simulate", { method: "POST", body: {} })
           .then(function () {
             msg($("pp-status"), "เติมเงินสำเร็จ!", true);
             stopPP();
@@ -702,7 +738,9 @@
       el.addEventListener("click", function () {
         var raw = el.textContent.trim();
         if (!raw) return;
-        if (navigator.clipboard) navigator.clipboard.writeText(raw);
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+          navigator.clipboard.writeText(raw).catch(function () {});
+        }
         var prev = raw;
         el.textContent = "คัดลอกเลขบัญชีแล้ว ✓";
         setTimeout(function () { el.textContent = prev; }, 1200);
@@ -726,8 +764,18 @@
         fileInput.addEventListener("change", function () {
           var file = fileInput.files && fileInput.files[0];
           if (!file) return;
+          var slipForm = $("f-bank-slip");
+          var slipMsg = slipForm ? slipForm.querySelector(".xn-msg") : null;
+          msg(slipMsg, "");
           readAndCompressImage(file, function (err, dataUrl) {
-            if (err || !dataUrl) return;
+            if (err || !dataUrl) {
+              fileInput.value = "";
+              if (hiddenData) hiddenData.value = "";
+              if (placeholder) placeholder.hidden = false;
+              if (previewWrap) previewWrap.hidden = true;
+              msg(slipMsg, (err && err.message) || "ไม่สามารถอ่านไฟล์รูปภาพนี้ได้");
+              return;
+            }
             if (hiddenData) hiddenData.value = dataUrl;
             if (previewImg) previewImg.src = dataUrl;
             if (fileNameLbl) fileNameLbl.textContent = file.name + " (คลิกเพื่อเปลี่ยนรูป)";
@@ -763,6 +811,7 @@
         })
           .then(function (r) {
             msg(m, "ส่งสลิปโอนเงินสำเร็จ! ระบบกำลังตรวจสอบรายการของคุณ", true);
+            if ($("bank-slip-file")) $("bank-slip-file").value = "";
             if ($("bank-slip-data")) $("bank-slip-data").value = "";
             if ($("bank-qr-payload")) $("bank-qr-payload").value = "";
             if ($("bank-slip-placeholder")) $("bank-slip-placeholder").hidden = false;

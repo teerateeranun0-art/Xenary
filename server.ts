@@ -25,6 +25,11 @@ import {
   sanitizePlans,
   filterAndEnrichKeys,
   computeAdminStats,
+  buildSessionCookieHeader,
+  isAllowedCsrfRequest,
+  BoundedRateLimiter,
+  pruneExpiredSessions,
+  extractTrueMoneyVoucherHash,
 } from './src/utils/security';
 import { verifyFirebaseIdToken } from './src/lib/firebase-admin';
 import { createStoreAdapter } from './src/db/adapter';
@@ -142,10 +147,16 @@ const FONT: Record<string, string> = {
 };
 
 const captchaMap = new Map<string, { code: string; exp: number }>();
+const CAPTCHA_MAX_ENTRIES = 2000;
 function createCaptcha(): { id: string; image: string } {
   const now = Date.now();
   for (const [k, v] of captchaMap.entries()) {
     if (v.exp < now) captchaMap.delete(k);
+  }
+  while (captchaMap.size >= CAPTCHA_MAX_ENTRIES) {
+    const oldest = captchaMap.keys().next().value;
+    if (!oldest) break;
+    captchaMap.delete(oldest);
   }
   const digits = '23456789';
   let code = '';
@@ -222,38 +233,61 @@ app.use((_req, res, next) => {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// 1. Sliding Window In-Memory Rate Limiter Helper
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+// 1. Bounded Sliding-Window Rate Limiter Helper
+const rateLimiter = new BoundedRateLimiter(10_000);
 function checkRateLimit(key: string, maxAttempts: number, windowMs: number): boolean {
-  const now = Date.now();
-  const entry = rateLimitMap.get(key);
-  if (!entry || entry.resetAt < now) {
-    rateLimitMap.set(key, { count: 1, resetAt: now + windowMs });
-    return true;
-  }
-  if (entry.count >= maxAttempts) {
-    return false;
-  }
-  entry.count += 1;
-  return true;
+  return rateLimiter.check(key, maxAttempts, windowMs);
 }
 
-// 2. Cross-Site Request Forgery (CSRF) Origin Verification on Mutating Endpoints
+function isHttpsRequest(req: Request): boolean {
+  if (req.secure) return true;
+  const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
+  return proto === 'https';
+}
+
+async function issueUserSession(
+  req: Request,
+  res: Response,
+  uid: string,
+  remember: boolean
+): Promise<void> {
+  const token = crypto.randomBytes(32).toString('hex');
+  const ttl = remember ? TTL_REMEMBER : TTL_SESSION;
+  await withLock('sessions-ledger', async () => {
+    const rawSessions = await readCollection<Session[]>('sessions.json', []);
+    const sessions = pruneExpiredSessions(rawSessions, Date.now(), 10, uid);
+    sessions.push({
+      id: crypto.randomBytes(12).toString('hex'),
+      h: sha256(token),
+      uid,
+      exp: Date.now() + ttl,
+    });
+    await writeCollection('sessions.json', sessions);
+  });
+  res.setHeader(
+    'Set-Cookie',
+    buildSessionCookieHeader(COOKIE_NAME, token, {
+      maxAgeSeconds: remember ? ttl / 1000 : undefined,
+      isHttps: isHttpsRequest(req),
+    })
+  );
+}
+
+// 2. Cross-Site Request Forgery (CSRF) Origin & Referer Verification on Mutating Endpoints
 app.use((req, res, next) => {
-  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
-  if (req.path.startsWith('/api/')) {
-    const origin = req.headers['origin'];
-    const host = req.headers['host'];
-    if (origin && host) {
-      try {
-        const originHost = new URL(String(origin)).host;
-        if (originHost !== host) {
-          return res.status(403).json({ error: 'invalid_origin', message: 'ไม่อนุญาตการเข้าถึงข้าม Origin (Cross-origin request blocked)' });
-        }
-      } catch {
-        return res.status(403).json({ error: 'invalid_origin', message: 'Invalid Origin Header' });
-      }
-    }
+  const csrf = isAllowedCsrfRequest({
+    method: req.method,
+    path: req.path,
+    origin: req.headers['origin'],
+    referer: req.headers['referer'],
+    host: req.headers['host'],
+    forwardedHost: req.headers['x-forwarded-host'],
+  });
+  if (!csrf.allowed) {
+    return res.status(403).json({
+      error: 'invalid_origin',
+      message: 'ไม่อนุญาตการเข้าถึงข้าม Origin (Cross-origin request blocked)',
+    });
   }
   next();
 });
@@ -347,7 +381,7 @@ app.get(
       store: settings.site_name || cat.store || 'XENARY',
       online: !settings.maintenance,
       maintenance: Boolean(settings.maintenance),
-      uptimeSec: 3600,
+      uptimeSec: Math.floor(process.uptime()),
       products: products.length,
       updatingCount: products.filter((p) => p.updating || p.status_mode === 'updating').length,
       orders: orders.length,
@@ -419,22 +453,7 @@ app.post(
 
       users.push(newUser);
       await writeCollection('users.json', users);
-
-      const token = crypto.randomBytes(32).toString('hex');
-      const ttl = remember ? TTL_REMEMBER : TTL_SESSION;
-      const sessions = await readCollection<Session[]>('sessions.json', []);
-      sessions.push({
-        id: crypto.randomBytes(12).toString('hex'),
-        h: sha256(token),
-        uid: newUser.id,
-        exp: Date.now() + ttl,
-      });
-      await writeCollection('sessions.json', sessions);
-
-      res.setHeader(
-        'Set-Cookie',
-        `${COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Lax${remember ? `; Max-Age=${ttl / 1000}` : ''}`
-      );
+      await issueUserSession(req, res, newUser.id, Boolean(remember));
 
       return res.status(201).json({
         user: {
@@ -459,7 +478,10 @@ app.post(
 
     const cleanUsername = String(username || '').trim().toLowerCase();
     const ip = req.ip || 'unknown';
-    if (!checkRateLimit(`login:${ip}:${cleanUsername}`, 12, 10 * 60 * 1000)) {
+    if (
+      !checkRateLimit(`login-ip:${ip}`, 40, 10 * 60 * 1000) ||
+      !checkRateLimit(`login:${ip}:${cleanUsername}`, 12, 10 * 60 * 1000)
+    ) {
       return res.status(429).json({ error: 'rate_limited', message: 'พยายามเข้าสู่ระบบบ่อยเกินไป กรุณารอ 10 นาที' });
     }
     const users = await readCollection<User[]>('users.json', []);
@@ -474,31 +496,14 @@ app.post(
       return res.status(403).json({ error: 'banned', message: 'บัญชีของคุณถูกระงับการใช้งาน' });
     }
 
-    return withLock('sessions-ledger', async () => {
-      const token = crypto.randomBytes(32).toString('hex');
-      const ttl = remember ? TTL_REMEMBER : TTL_SESSION;
-      const sessions = await readCollection<Session[]>('sessions.json', []);
-      sessions.push({
-        id: crypto.randomBytes(12).toString('hex'),
-        h: sha256(token),
-        uid: user.id,
-        exp: Date.now() + ttl,
-      });
-      await writeCollection('sessions.json', sessions);
-
-      res.setHeader(
-        'Set-Cookie',
-        `${COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Lax${remember ? `; Max-Age=${ttl / 1000}` : ''}`
-      );
-
-      res.json({
-        user: {
-          id: user.id,
-          username: user.username,
-          balance: user.balance,
-          role: user.role,
-        },
-      });
+    await issueUserSession(req, res, user.id, Boolean(remember));
+    return res.json({
+      user: {
+        id: user.id,
+        username: user.username,
+        balance: user.balance,
+        role: user.role,
+      },
     });
   })
 );
@@ -578,22 +583,7 @@ app.post(
       }
 
       await writeCollection('users.json', users);
-
-      const token = crypto.randomBytes(32).toString('hex');
-      const ttl = remember ? TTL_REMEMBER : TTL_SESSION;
-      const sessions = await readCollection<Session[]>('sessions.json', []);
-      sessions.push({
-        id: crypto.randomBytes(12).toString('hex'),
-        h: sha256(token),
-        uid: user.id,
-        exp: Date.now() + ttl,
-      });
-      await writeCollection('sessions.json', sessions);
-
-      res.setHeader(
-        'Set-Cookie',
-        `${COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Lax${remember ? `; Max-Age=${ttl / 1000}` : ''}`
-      );
+      await issueUserSession(req, res, user.id, Boolean(remember));
 
       return res.json({
         user: {
@@ -622,7 +612,10 @@ app.post(
         await writeCollection('sessions.json', sessions);
       });
     }
-    res.setHeader('Set-Cookie', `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+    res.setHeader(
+      'Set-Cookie',
+      buildSessionCookieHeader(COOKIE_NAME, '', { maxAgeSeconds: 0, isHttps: isHttpsRequest(req) })
+    );
     res.json({ ok: true });
   })
 );
@@ -754,6 +747,10 @@ app.post(
     }
 
     return withLock('ledger', async () => {
+      const settings = await readCollection<any>('settings.json', {});
+      if (settings.maintenance) {
+        return res.status(503).json({ error: 'maintenance', message: 'ระบบกำลังปิดปรับปรุงชั่วคราว กรุณาลองใหม่ภายหลัง' });
+      }
       const products = (await getCatalogData()).products;
       const item = products.find((p) => p.slug === product || p.id === product || p.channel === product);
       if (!item) return res.status(400).json({ error: 'unknown_product', message: 'ไม่พบสินค้านี้ในระบบ' });
@@ -761,7 +758,14 @@ app.post(
         return res.status(409).json({ error: 'product_updating', message: 'สินค้านี้กำลังปิดปรับปรุงชั่วคราว' });
       }
 
-      const chosenPlan = (item.plans || []).find((pl: any) => pl.label === plan) || item.plans?.[0];
+      const hasExplicitPlan = plan !== undefined && plan !== null;
+      const requestedPlan = hasExplicitPlan ? String(plan).trim() : '';
+      if (hasExplicitPlan && !requestedPlan) {
+        return res.status(400).json({ error: 'unknown_plan', message: 'กรุณาเลือกแพ็กเกจสินค้า' });
+      }
+      const chosenPlan = requestedPlan
+        ? (item.plans || []).find((pl: any) => String(pl.label || '').trim() === requestedPlan)
+        : item.plans?.[0];
       if (!chosenPlan) return res.status(400).json({ error: 'unknown_plan', message: 'ไม่พบแพ็กเกจที่เลือก' });
 
       let unitSatang: Satang;
@@ -910,10 +914,13 @@ app.get(
   '/api/wallet/config',
   asyncHandler(async (_req, res) => {
     const settings = await readCollection<any>('settings.json', {});
+    const topupDisabled = settings.topup_mode === 'disabled' || Boolean(settings.maintenance);
     res.json({
       demo: isDemoTopupEnabled(),
-      truemoney: true,
-      promptpay: true,
+      enabled: !topupDisabled,
+      topup_mode: settings.topup_mode || 'direct',
+      truemoney: !topupDisabled,
+      promptpay: !topupDisabled,
       phone: settings.truemoney_phone || '0812345678',
     });
   })
@@ -940,10 +947,8 @@ app.post(
       return res.status(429).json({ error: 'rate_limited', message: 'คุณทำรายการบ่อยเกินไป กรุณารอ 5 นาที' });
     }
     const { link } = req.body || {};
-    const voucherHash = String(link || '')
-      .replace(/.*[?&]v=/, '')
-      .replace(/[^a-zA-Z0-9_-]/g, '');
-    if (!voucherHash || voucherHash.length < 8) {
+    const voucherHash = extractTrueMoneyVoucherHash(link);
+    if (!voucherHash) {
       return res.status(400).json({ error: 'bad_link', message: 'ลิงก์ซองอั่งเปาไม่ถูกต้อง' });
     }
     if (!isDemoTopupEnabled()) {
@@ -954,7 +959,13 @@ app.post(
     }
 
     return withLock('ledger', async () => {
-      const topups = await readCollection<any[]>('topups.json', []);
+      const [topups, settings] = await Promise.all([
+        readCollection<any[]>('topups.json', []),
+        readCollection<any>('settings.json', {}),
+      ]);
+      if (settings.maintenance || settings.topup_mode === 'disabled') {
+        return res.status(503).json({ error: 'topup_disabled', message: 'ระบบเติมเงินปิดให้บริการชั่วคราว' });
+      }
       if (topups.some((t) => t.voucher === voucherHash && t.status === 'completed')) {
         return res.status(409).json({ error: 'already_redeemed', message: 'ซองอั่งเปานี้เคยถูกรับไปแล้ว' });
       }
@@ -996,6 +1007,9 @@ app.post(
   '/api/wallet/promptpay',
   requireAuth,
   asyncHandler(async (req, res) => {
+    if (!checkRateLimit(`promptpay:${req.user!.id}`, 15, 5 * 60 * 1000)) {
+      return res.status(429).json({ error: 'rate_limited', message: 'สร้าง QR บ่อยเกินไป กรุณารอสักครู่' });
+    }
     const { amount } = req.body || {};
     let amtSatang: Satang;
     try {
@@ -1008,7 +1022,10 @@ app.post(
     }
 
     const settings = await readCollection<any>('settings.json', {});
-    const ppPhone = settings.promptpay_phone || settings.promptpay_id || '0812345678';
+    if (settings.maintenance || settings.topup_mode === 'disabled') {
+      return res.status(503).json({ error: 'topup_disabled', message: 'ระบบเติมเงินปิดให้บริการชั่วคราว' });
+    }
+    const ppPhone = settings.promptpay_id || settings.promptpay_phone || '0812345678';
     const payload = generatePromptpayPayload(ppPhone, amtSatang);
     const qrImage = await QRCode.toDataURL(payload, { margin: 2, width: 260 });
 
@@ -1153,10 +1170,14 @@ app.post(
     }
 
     return withLock('ledger', async () => {
-      const [list, channels] = await Promise.all([
+      const [list, channels, settings] = await Promise.all([
         readCollection<any[]>('manual_topups.json', []),
         readCollection<any[]>('payment_channels.json', []),
+        readCollection<any>('settings.json', {}),
       ]);
+      if (settings.maintenance || settings.topup_mode === 'disabled') {
+        return res.status(503).json({ error: 'topup_disabled', message: 'ระบบเติมเงินปิดให้บริการชั่วคราว' });
+      }
       const ch = channels.find((c) => c.id === channel_id);
       const channelName = ch ? ch.name : String(channel_id || 'โอนผ่านธนาคาร').slice(0, 64);
       const item = {
@@ -1191,7 +1212,13 @@ app.post(
     if (!code) return res.status(400).json({ error: 'bad_code', message: 'กรุณากรอกรหัสคูปอง' });
 
     return withLock('ledger', async () => {
-      const coupons = await readCollection<any[]>('coupons.json', []);
+      const [coupons, settings] = await Promise.all([
+        readCollection<any[]>('coupons.json', []),
+        readCollection<any>('settings.json', {}),
+      ]);
+      if (settings.maintenance || settings.topup_mode === 'disabled') {
+        return res.status(503).json({ error: 'topup_disabled', message: 'ระบบเติมเงินและแลกโค้ดปิดให้บริการชั่วคราว' });
+      }
       const cp = coupons.find((c) => c.code === code && c.enabled);
       if (!cp) return res.status(404).json({ error: 'not_found', message: 'ไม่พบรหัสคูปองนี้หรือคูปองหมดอายุ' });
 
@@ -1341,15 +1368,18 @@ app.post(
   asyncHandler(async (req, res) => {
     const { product_id, plan_label, raw_keys, keys: keysArr, sync_stock } = req.body || {};
     const cleanProdId = String(product_id || '').trim();
-    const lines = Array.isArray(keysArr)
-      ? keysArr.map((l) => String(l || '').trim()).filter(Boolean)
+    const lines = (Array.isArray(keysArr)
+      ? keysArr.map((l) => String(l || '').trim())
       : String(raw_keys || '')
           .split('\n')
-          .map((l) => l.trim())
-          .filter(Boolean);
+          .map((l) => l.trim()))
+      .filter((l) => l.length > 0 && l.length <= 512);
 
     if (!cleanProdId || !lines.length) {
       return res.status(400).json({ error: 'missing_fields', message: 'กรุณาระบุสินค้าและคีย์อย่างน้อย 1 รายการ' });
+    }
+    if (lines.length > 5000) {
+      return res.status(400).json({ error: 'too_many_keys', message: 'นำเข้าคีย์ได้สูงสุดครั้งละ 5,000 รายการ' });
     }
 
     await withLock('ledger', async () => {
@@ -1357,11 +1387,13 @@ app.post(
         readCollection<any[]>('keys.json', []),
         getCatalogData(),
       ]);
+      const prod = cat.products.find((p) => p.slug === cleanProdId || p.id === cleanProdId);
+      const canonicalProdId = prod ? prod.slug || prod.id : cleanProdId;
       const now = new Date().toISOString();
       for (const line of lines) {
         keys.push({
           id: `k_${Date.now().toString(36)}_${crypto.randomBytes(3).toString('hex')}`,
-          product_id: cleanProdId,
+          product_id: canonicalProdId,
           plan_label: plan_label ? String(plan_label).trim() : null,
           key_value: line,
           is_used: false,
@@ -1371,14 +1403,11 @@ app.post(
       }
       await writeCollection('keys.json', keys);
 
-      if (sync_stock !== false) {
-        const prod = cat.products.find((p) => p.slug === cleanProdId || p.id === cleanProdId);
-        if (prod) {
-          prod.stock = keys.filter(
-            (k) => (k.product_id === prod.slug || k.product_id === prod.id) && !k.is_used
-          ).length;
-          await saveProductsList(cat.products);
-        }
+      if (sync_stock !== false && prod) {
+        prod.stock = keys.filter(
+          (k) => (k.product_id === prod.slug || k.product_id === prod.id) && !k.is_used
+        ).length;
+        await saveProductsList(cat.products);
       }
     });
     res.json({ ok: true, count: lines.length, added: lines.length });
@@ -1392,9 +1421,13 @@ app.patch(
     const { id } = req.params;
     const { product_id, plan_label, key_value, is_used } = req.body || {};
     return withLock('ledger', async () => {
-      const keys = await readCollection<any[]>('keys.json', []);
+      const [keys, cat] = await Promise.all([
+        readCollection<any[]>('keys.json', []),
+        getCatalogData(),
+      ]);
       const k = keys.find((item) => item.id === id);
       if (!k) return res.status(404).json({ error: 'key_not_found' });
+      const prevProdId = k.product_id;
       if (product_id !== undefined) k.product_id = String(product_id).trim();
       if (plan_label !== undefined) k.plan_label = plan_label ? String(plan_label).trim() : null;
       if (key_value !== undefined) {
@@ -1410,6 +1443,21 @@ app.patch(
         }
       }
       await writeCollection('keys.json', keys);
+      let catalogDirty = false;
+      for (const prod of cat.products) {
+        if (
+          prod.slug === prevProdId ||
+          prod.id === prevProdId ||
+          prod.slug === k.product_id ||
+          prod.id === k.product_id
+        ) {
+          prod.stock = keys.filter(
+            (item) => (item.product_id === prod.slug || item.product_id === prod.id) && !item.is_used
+          ).length;
+          catalogDirty = true;
+        }
+      }
+      if (catalogDirty) await saveProductsList(cat.products);
       res.json({ ok: true, key: k });
     });
   })
@@ -1421,11 +1469,22 @@ app.delete(
   asyncHandler(async (req, res) => {
     const { id } = req.params;
     return withLock('ledger', async () => {
-      const keys = await readCollection<any[]>('keys.json', []);
+      const [keys, cat] = await Promise.all([
+        readCollection<any[]>('keys.json', []),
+        getCatalogData(),
+      ]);
       const idx = keys.findIndex((k) => k.id === id);
       if (idx === -1) return res.status(404).json({ error: 'key_not_found' });
+      const removedKey = keys[idx];
       keys.splice(idx, 1);
       await writeCollection('keys.json', keys);
+      const prod = cat.products.find((p) => p.slug === removedKey.product_id || p.id === removedKey.product_id);
+      if (prod) {
+        prod.stock = keys.filter(
+          (item) => (item.product_id === prod.slug || item.product_id === prod.id) && !item.is_used
+        ).length;
+        await saveProductsList(cat.products);
+      }
       res.json({ ok: true });
     });
   })
@@ -1437,14 +1496,32 @@ app.delete(
   asyncHandler(async (req, res) => {
     const productId = typeof req.query.product_id === 'string' ? req.query.product_id.trim() : '';
     return withLock('ledger', async () => {
-      let keys = await readCollection<any[]>('keys.json', []);
-      const initial = keys.length;
-      keys = keys.filter((k) => {
+      const [rawKeys, cat] = await Promise.all([
+        readCollection<any[]>('keys.json', []),
+        getCatalogData(),
+      ]);
+      const matchedProd = productId
+        ? cat.products.find((p) => p.slug === productId || p.id === productId)
+        : null;
+      const targetIds = matchedProd
+        ? new Set([String(matchedProd.slug || ''), String(matchedProd.id || '')].filter(Boolean))
+        : productId
+          ? new Set([productId])
+          : null;
+
+      const initial = rawKeys.length;
+      const keys = rawKeys.filter((k) => {
         if (!k.is_used) return true;
-        if (productId && k.product_id !== productId) return true;
+        if (targetIds && !targetIds.has(String(k.product_id || ''))) return true;
         return false;
       });
       await writeCollection('keys.json', keys);
+      if (matchedProd) {
+        matchedProd.stock = keys.filter(
+          (k) => (k.product_id === matchedProd.slug || k.product_id === matchedProd.id) && !k.is_used
+        ).length;
+        await saveProductsList(cat.products);
+      }
       const removed = initial - keys.length;
       res.json({ ok: true, deleted: removed, removed });
     });
@@ -1798,20 +1875,30 @@ app.post(
 
       if (action === 'approve') {
         if (t.status === 'approved' || t.status === 'completed') {
-          return res.status(400).json({ error: 'already_approved' });
+          return res.status(400).json({ error: 'already_approved', message: 'รายการนี้ถูกอนุมัติไปแล้ว' });
         }
-        t.status = 'approved';
+        if (t.status === 'cancelled' || t.status === 'expired' || t.status === 'rejected') {
+          return res.status(400).json({ error: 'invalid_status', message: 'ไม่สามารถอนุมัติรายการที่ถูกยกเลิกหรือหมดอายุได้' });
+        }
         const users = await readCollection<User[]>('users.json', []);
         const u = users.find((usr) => usr.id === t.uid || usr.username === t.user);
-        if (u) {
-          const cur = Satang.fromThb(u.balance);
-          const topSat = Satang.fromThb(Number(t.amount) || 0);
-          const added = cur.checkedAdd(topSat);
-          if (added) u.balance = added.toThb();
-          u.updatedAt = new Date().toISOString();
-          await writeCollection('users.json', users);
+        if (!u) {
+          return res.status(404).json({ error: 'user_not_found', message: 'ไม่พบบัญชีผู้ใช้สำหรับเติมเงินรายการนี้' });
         }
+        const cur = Satang.fromThb(u.balance);
+        const topSat = Satang.fromThb(Number(t.amount) || 0);
+        const added = cur.checkedAdd(topSat);
+        if (!added) {
+          return res.status(400).json({ error: 'balance_overflow', message: 'ยอดเงินเกินขีดจำกัด' });
+        }
+        t.status = 'approved';
+        u.balance = added.toThb();
+        u.updatedAt = new Date().toISOString();
+        await writeCollection('users.json', users);
       } else if (action === 'reject') {
+        if (t.status === 'approved' || t.status === 'completed') {
+          return res.status(400).json({ error: 'already_approved', message: 'ไม่สามารถปฏิเสธรายการที่อนุมัติไปแล้วได้' });
+        }
         t.status = 'rejected';
       } else {
         return res.status(400).json({ error: 'invalid_action' });
@@ -1846,21 +1933,31 @@ app.post(
 
       if (action === 'approve') {
         if (t.status === 'approved' || t.status === 'completed') {
-          return res.status(400).json({ error: 'already_approved' });
+          return res.status(400).json({ error: 'already_approved', message: 'รายการนี้ถูกอนุมัติไปแล้ว' });
+        }
+        if (t.status === 'rejected' || t.status === 'cancelled') {
+          return res.status(400).json({ error: 'invalid_status', message: 'ไม่สามารถอนุมัติรายการที่ถูกปฏิเสธหรือยกเลิกไปแล้วได้' });
+        }
+        const users = await readCollection<User[]>('users.json', []);
+        const u = users.find((usr) => usr.id === t.user_id || usr.username === t.username);
+        if (!u) {
+          return res.status(404).json({ error: 'user_not_found', message: 'ไม่พบบัญชีผู้ใช้สำหรับเติมเงินรายการนี้' });
+        }
+        const cur = Satang.fromThb(u.balance);
+        const topSat = Satang.fromThb(Number(t.amount) || 0);
+        const added = cur.checkedAdd(topSat);
+        if (!added) {
+          return res.status(400).json({ error: 'balance_overflow', message: 'ยอดเงินเกินขีดจำกัด' });
         }
         t.status = 'approved';
         if (note) t.admin_note = note;
-        const users = await readCollection<User[]>('users.json', []);
-        const u = users.find((usr) => usr.id === t.user_id || usr.username === t.username);
-        if (u) {
-          const cur = Satang.fromThb(u.balance);
-          const topSat = Satang.fromThb(Number(t.amount) || 0);
-          const added = cur.checkedAdd(topSat);
-          if (added) u.balance = added.toThb();
-          u.updatedAt = new Date().toISOString();
-          await writeCollection('users.json', users);
-        }
+        u.balance = added.toThb();
+        u.updatedAt = new Date().toISOString();
+        await writeCollection('users.json', users);
       } else if (action === 'reject') {
+        if (t.status === 'approved' || t.status === 'completed') {
+          return res.status(400).json({ error: 'already_approved', message: 'ไม่สามารถปฏิเสธรายการที่อนุมัติไปแล้วได้' });
+        }
         t.status = 'rejected';
         if (note) t.admin_note = note;
       } else {
@@ -1932,6 +2029,9 @@ app.patch(
       if (code !== undefined) {
         const cleanCode = String(code).trim().toUpperCase();
         if (!cleanCode) return res.status(400).json({ error: 'invalid_code' });
+        if (coupons.some((other) => other.id !== id && other.code === cleanCode)) {
+          return res.status(409).json({ error: 'duplicate_coupon', message: 'รหัสคูปองนี้มีอยู่แล้ว' });
+        }
         c.code = cleanCode;
       }
       if (amount !== undefined) {
@@ -2279,9 +2379,15 @@ app.patch(
       const settings = await readCollection<any>('settings.json', {});
       if (body.site_name !== undefined) settings.site_name = String(body.site_name).trim().slice(0, 64) || 'XENARY';
       if (body.truemoney_phone !== undefined) settings.truemoney_phone = String(body.truemoney_phone).trim().slice(0, 32);
-      if (body.promptpay_id !== undefined) settings.promptpay_id = String(body.promptpay_id).trim().slice(0, 32);
-      if (body.promptpay_phone !== undefined) settings.promptpay_phone = String(body.promptpay_phone).trim().slice(0, 32);
-      if (body.topup_mode !== undefined) settings.topup_mode = ['direct', 'manual', 'promptpay'].includes(String(body.topup_mode)) ? String(body.topup_mode) : 'direct';
+      if (body.promptpay_id !== undefined) {
+        settings.promptpay_id = String(body.promptpay_id).trim().slice(0, 32);
+        if (body.promptpay_phone === undefined) settings.promptpay_phone = settings.promptpay_id;
+      }
+      if (body.promptpay_phone !== undefined) {
+        settings.promptpay_phone = String(body.promptpay_phone).trim().slice(0, 32);
+        if (body.promptpay_id === undefined) settings.promptpay_id = settings.promptpay_phone;
+      }
+      if (body.topup_mode !== undefined) settings.topup_mode = ['direct', 'manual', 'promptpay', 'disabled'].includes(String(body.topup_mode)) ? String(body.topup_mode) : 'direct';
       if (body.banner_url !== undefined) settings.banner_url = String(body.banner_url).trim();
       if (body.discord_url !== undefined) settings.discord_url = String(body.discord_url).trim();
       if (body.maintenance !== undefined) settings.maintenance = Boolean(body.maintenance);

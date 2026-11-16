@@ -358,6 +358,7 @@ export const COLLECTION_SPECS: Record<string, CollectionSpec> = {
       'slip_url',
       'qr_payload',
       'status',
+      'admin_note',
       'created_at',
     ],
     conflictTarget: 'id',
@@ -372,20 +373,25 @@ export const COLLECTION_SPECS: Record<string, CollectionSpec> = {
       slip_url: t.slip_url ?? null,
       qr_payload: t.qr_payload ?? null,
       status: String(t.status || 'pending'),
+      admin_note: t.admin_note ?? null,
       created_at: toIsoOrNow(t.created_at),
     }),
-    fromRow: (r) => ({
-      id: r.id,
-      user_id: r.user_id,
-      username: r.username,
-      channel_id: r.channel_id,
-      channel_name: r.channel_name,
-      amount: Number(r.amount) || 0,
-      slip_url: r.slip_url ?? null,
-      qr_payload: r.qr_payload ?? null,
-      status: r.status,
-      created_at: toIsoOrNow(r.created_at),
-    }),
+    fromRow: (r) => {
+      const obj: Record<string, any> = {
+        id: r.id,
+        user_id: r.user_id,
+        username: r.username,
+        channel_id: r.channel_id,
+        channel_name: r.channel_name,
+        amount: Number(r.amount) || 0,
+        slip_url: r.slip_url ?? null,
+        qr_payload: r.qr_payload ?? null,
+        status: r.status,
+        created_at: toIsoOrNow(r.created_at),
+      };
+      if (r.admin_note) obj.admin_note = r.admin_note;
+      return obj;
+    },
   },
 
   'coupons.json': {
@@ -555,4 +561,56 @@ export function normalizeCatalogPayload(data: any): CatalogData {
     checkout: data?.checkout || { ticket: '/contact/' },
     products: Array.isArray(data?.products) ? data.products : [],
   };
+}
+
+export function chunkArray<T>(items: readonly T[], size: number): T[][] {
+  const step = Math.max(1, Math.floor(size));
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += step) {
+    out.push(items.slice(i, i + step));
+  }
+  return out;
+}
+
+export function buildMultiRowUpsertQuery(options: {
+  table: string;
+  columns: readonly string[];
+  conflictTarget: string;
+  rows: Record<string, any>[];
+  jsonbColumns: ReadonlySet<string>;
+  doNothing?: boolean;
+}): { sql: string; values: any[] } {
+  const { table, columns, conflictTarget, rows, jsonbColumns, doNothing = false } = options;
+  const values: any[] = [];
+  const tupleSqlList: string[] = [];
+
+  for (const row of rows) {
+    const placeholders: string[] = [];
+    for (const col of columns) {
+      const rawVal = row[col];
+      let serialized: any;
+      if (rawVal === undefined) {
+        serialized = null;
+      } else if (jsonbColumns.has(col)) {
+        serialized = rawVal === null ? null : JSON.stringify(rawVal);
+      } else {
+        serialized = rawVal;
+      }
+      values.push(serialized);
+      const paramIdx = values.length;
+      placeholders.push(jsonbColumns.has(col) ? `$${paramIdx}::jsonb` : `$${paramIdx}`);
+    }
+    tupleSqlList.push(`(${placeholders.join(', ')})`);
+  }
+
+  const updateColumns = columns.filter((c) => c !== conflictTarget);
+  const conflictClause =
+    doNothing || updateColumns.length === 0
+      ? `ON CONFLICT (${conflictTarget}) DO NOTHING`
+      : `ON CONFLICT (${conflictTarget}) DO UPDATE SET ${updateColumns
+          .map((c) => `${c} = EXCLUDED.${c}`)
+          .join(', ')}`;
+
+  const sql = `INSERT INTO ${table} (${columns.join(', ')}) VALUES ${tupleSqlList.join(', ')} ${conflictClause}`;
+  return { sql, values };
 }

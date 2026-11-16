@@ -79,7 +79,7 @@ function safeContactUrl(rawUrl, pfKey) {
   if (pfKey === "phone" && u.indexOf("tel:") !== 0 && u.indexOf("http") !== 0) {
     return "tel:" + u.replace(/[^0-9+*#-]/g, "");
   }
-  if (/^(https?:\/\/|mailto:|tel:|\/|#)/i.test(u)) {
+  if (/^(https?:\/\/|mailto:|tel:|\/(?!\/)|#)/i.test(u)) {
     return u;
   }
   return "#";
@@ -125,7 +125,9 @@ function renderContactCards(links) {
     if (copyBtn) {
       copyBtn.addEventListener("click", function (e) {
         e.stopPropagation();
-        if (navigator.clipboard) navigator.clipboard.writeText(handleText);
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+          navigator.clipboard.writeText(handleText).catch(function () {});
+        }
         copyBtn.textContent = "คัดลอกแล้ว: " + handleText;
         copyBtn.style.color = "#34d399";
         setTimeout(function () {
@@ -263,7 +265,7 @@ function initStatusTile() {
         if (href === "/" && label === "หน้าแรก") label = "หน้าหลัก";
         if (href === "/products" && label === "สินค้า") label = "ร้านค้า";
         var svg = NAV_ICONS[href] || "";
-        a.innerHTML = svg + "<span>" + label + "</span>";
+        a.innerHTML = svg + "<span>" + escHtml(label) + "</span>";
         a.dataset.iconized = "1";
       }
       if (href === "/account") {
@@ -324,10 +326,17 @@ function initStatusTile() {
         if (window.XenaryFirebase && typeof window.XenaryFirebase.signOut === "function") {
           window.XenaryFirebase.signOut().catch(function () {});
         }
-        fetch("/api/auth/logout", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }).then(function () {
-          document.dispatchEvent(new Event("xn:auth"));
-          location.href = "/";
-        });
+        fetch("/api/auth/logout", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        })
+          .catch(function () {})
+          .finally(function () {
+            document.dispatchEvent(new Event("xn:auth"));
+            location.href = "/";
+          });
       });
       box.appendChild(b);
     }
@@ -345,7 +354,7 @@ function initStatusTile() {
 
 
   function load() {
-    fetch("/api/auth/me", { cache: "no-store" })
+    fetch("/api/auth/me", { cache: "no-store", credentials: "same-origin" })
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (d.user) {
@@ -395,13 +404,14 @@ function initStatusTile() {
 
   function updateNavLinks(pathname) {
     var cleanPath = pathname.replace(/\/+$/, "") || "/";
+    var isOrdersView = cleanPath === "/account" && new URLSearchParams(location.search).get("tab") === "orders";
     document.querySelectorAll(".xn-links a").forEach(function (a) {
       if (a.classList.contains("xn-pill") || a.classList.contains("xn-adm-pill") || a.classList.contains("cta")) return;
       var aPath = (a.getAttribute("href") || "").replace(/\/+$/, "") || "/";
-      if (aPath === cleanPath) {
-        a.classList.add("on");
+      if (aPath === "/account") {
+        a.classList.toggle("on", cleanPath === "/account" && !isOrdersView);
       } else {
-        a.classList.remove("on");
+        a.classList.toggle("on", aPath === cleanPath);
       }
     });
   }
@@ -445,6 +455,8 @@ function initStatusTile() {
     }
   }
 
+  var lastPjaxPath = location.pathname.replace(/\/+$/, "") || "/";
+
   function pjaxNavigate(url, push) {
     var curMain = document.querySelector("main.xn-main");
     if (!curMain) {
@@ -481,6 +493,7 @@ function initStatusTile() {
         if (push) {
           history.pushState({ pjaxUrl: url }, doc.title || "", url);
         }
+        lastPjaxPath = location.pathname.replace(/\/+$/, "") || "/";
 
         updateNavLinks(location.pathname);
         runPageScripts(curMain);
@@ -498,14 +511,24 @@ function initStatusTile() {
     var a = e.target.closest("a");
     if (!a || !a.href) return;
 
-    var targetUrl = new URL(a.href, location.origin);
+    var targetUrl;
+    try {
+      targetUrl = new URL(a.href, location.origin);
+    } catch (err) {
+      return;
+    }
     if (targetUrl.origin !== location.origin) return;  
     if (a.hasAttribute("download") || a.target === "_blank") return;
 
     var p = targetUrl.pathname;
+    var cleanTargetPath = p.replace(/\/+$/, "") || "/";
+    var cleanCurrentPath = location.pathname.replace(/\/+$/, "") || "/";
 
     if (location.pathname.startsWith("/admin/")) return;
     if (p.startsWith("/admin/")) return;
+    if (cleanTargetPath === "/account" && cleanCurrentPath === "/account") {
+      return;
+    }
     if (p === location.pathname && targetUrl.search === location.search && targetUrl.hash) {
       return;  
     }
@@ -516,6 +539,11 @@ function initStatusTile() {
   });
 
   window.addEventListener("popstate", function () {
+    var curPath = location.pathname.replace(/\/+$/, "") || "/";
+    if (curPath === lastPjaxPath && (curPath === "/products" || curPath === "/account")) {
+      updateNavLinks(location.pathname);
+      return;
+    }
     pjaxNavigate(location.href, false);
   });
 
@@ -666,7 +694,7 @@ function initStatusTile() {
     wrap.innerHTML =
       '<div class="xn-mp-dock" id="xn-mp-dock">' +
         '<button type="button" class="xn-mp-trigger" id="xn-mp-btn" title="เครื่องเล่นเพลง" aria-label="เครื่องเล่นเพลง">' +
-          '<img src="' + COVER + '" alt="Music Cover">' +
+          '<img src="' + escHtml(COVER) + '" alt="Music Cover">' +
           '<span class="xn-mp-trigger-badge">' +
             '<svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>' +
           '</span>' +
@@ -688,12 +716,12 @@ function initStatusTile() {
         '</div>' +
 
         '<div class="xn-mp-track-card">' +
-          '<img class="xn-mp-cover" src="' + COVER + '" alt="Cover">' +
+          '<img class="xn-mp-cover" src="' + escHtml(COVER) + '" alt="Cover">' +
           '<div class="xn-mp-meta">' +
-            '<div class="xn-mp-track-name" title="' + TITLE + '">' + TITLE + '</div>' +
-            '<div class="xn-mp-track-artist">' + ARTIST + '</div>' +
+            '<div class="xn-mp-track-name" title="' + escHtml(TITLE) + '">' + escHtml(TITLE) + '</div>' +
+            '<div class="xn-mp-track-artist">' + escHtml(ARTIST) + '</div>' +
           '</div>' +
-          '<a class="xn-mp-yt-link" href="' + YT_URL + '" target="_blank" rel="noopener" title="เปิดบน YouTube">' +
+          '<a class="xn-mp-yt-link" href="' + escHtml(YT_URL) + '" target="_blank" rel="noopener noreferrer" title="เปิดบน YouTube">' +
             '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>' +
           '</a>' +
         '</div>' +
@@ -758,8 +786,10 @@ function initStatusTile() {
     var isPlaying = false;
     var isLooping = true;
     var isMuted = false;
-    var currentVol = parseInt(localStorage.getItem("xn_yt_vol") || "40", 10);
-    var savedTime = parseFloat(localStorage.getItem("xn_yt_time") || "0");
+    var rawVol = parseInt(localStorage.getItem("xn_yt_vol") || "40", 10);
+    var currentVol = Number.isFinite(rawVol) ? Math.max(0, Math.min(100, rawVol)) : 40;
+    var rawTime = parseFloat(localStorage.getItem("xn_yt_time") || "0");
+    var savedTime = Number.isFinite(rawTime) && rawTime >= 0 ? rawTime : 0;
     var shouldAutoPlay = localStorage.getItem("xn_yt_playing") !== "false";
     var timeInterval = null;
 

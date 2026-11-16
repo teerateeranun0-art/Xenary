@@ -14,6 +14,11 @@ import {
   sanitizePlans,
   filterAndEnrichKeys,
   computeAdminStats,
+  buildSessionCookieHeader,
+  isAllowedCsrfRequest,
+  BoundedRateLimiter,
+  pruneExpiredSessions,
+  extractTrueMoneyVoucherHash,
 } from './security';
 
 test('Satang converts THB to satangs accurately without float rounding bug', () => {
@@ -175,4 +180,90 @@ test('computeAdminStats accurately calculates today/month/total revenue in BKK a
   assert.equal(stats.unused_keys_count, 1);
   assert.equal(stats.total_users, 2);
   assert.equal(stats.products_count, 1);
+});
+
+test('buildSessionCookieHeader adds Secure only on HTTPS and preserves HttpOnly & SameSite', () => {
+  const httpCookie = buildSessionCookieHeader('xn_sid', 'tok123', { maxAgeSeconds: 3600, isHttps: false });
+  assert.equal(httpCookie, 'xn_sid=tok123; Path=/; HttpOnly; SameSite=Lax; Max-Age=3600');
+
+  const httpsCookie = buildSessionCookieHeader('xn_sid', 'tok123', { isHttps: true });
+  assert.equal(httpsCookie, 'xn_sid=tok123; Path=/; HttpOnly; SameSite=Lax; Secure');
+
+  const clearCookie = buildSessionCookieHeader('xn_sid', '', { maxAgeSeconds: 0, isHttps: true });
+  assert.equal(clearCookie, 'xn_sid=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure');
+});
+
+test('isAllowedCsrfRequest checks Origin, Referer, null origin, and x-forwarded-host', () => {
+  assert.equal(
+    isAllowedCsrfRequest({ method: 'GET', path: '/api/orders', origin: 'https://evil.com', host: 'xenary.store' }).allowed,
+    true
+  );
+  assert.equal(
+    isAllowedCsrfRequest({ method: 'POST', path: '/api/orders', origin: 'https://xenary.store', host: 'xenary.store' }).allowed,
+    true
+  );
+  assert.equal(
+    isAllowedCsrfRequest({
+      method: 'POST',
+      path: '/api/orders',
+      origin: 'https://ais-dev.asia-southeast1.run.app',
+      host: 'localhost:3000',
+      forwardedHost: 'ais-dev.asia-southeast1.run.app',
+    }).allowed,
+    true
+  );
+  assert.equal(
+    isAllowedCsrfRequest({ method: 'POST', path: '/api/orders', origin: 'null', host: 'xenary.store' }).allowed,
+    false
+  );
+  assert.equal(
+    isAllowedCsrfRequest({ method: 'POST', path: '/api/orders', origin: 'https://evil.com', host: 'xenary.store' }).allowed,
+    false
+  );
+  assert.equal(
+    isAllowedCsrfRequest({ method: 'POST', path: '/api/orders', referer: 'https://evil.com/form', host: 'xenary.store' }).allowed,
+    false
+  );
+  assert.equal(
+    isAllowedCsrfRequest({ method: 'POST', path: '/api/orders', referer: 'https://xenary.store/products/', host: 'xenary.store' }).allowed,
+    true
+  );
+});
+
+test('BoundedRateLimiter enforces limits and evicts stale/overflow entries under maxEntries cap', () => {
+  const rl = new BoundedRateLimiter(3);
+  assert.equal(rl.check('ip1', 2, 1000, 100), true);
+  assert.equal(rl.check('ip1', 2, 1000, 100), true);
+  assert.equal(rl.check('ip1', 2, 1000, 100), false);
+  assert.equal(rl.check('ip1', 2, 1000, 1200), true);
+
+  rl.check('ip2', 5, 1000, 1200);
+  rl.check('ip3', 5, 1000, 1200);
+  rl.check('ip4', 5, 1000, 1200);
+  assert.ok(rl.size <= 3);
+});
+
+test('pruneExpiredSessions removes expired entries and caps per-user active sessions', () => {
+  const sessions = [
+    { id: 's0', uid: 'u1', exp: 500 },
+    { id: 's1', uid: 'u1', exp: 2000 },
+    { id: 's2', uid: 'u1', exp: 3000 },
+    { id: 's3', uid: 'u1', exp: 4000 },
+    { id: 's4', uid: 'u2', exp: 2500 },
+  ];
+  const pruned = pruneExpiredSessions(sessions, 1000, 3, 'u1');
+  assert.deepEqual(
+    pruned.map((s) => s.id),
+    ['s2', 's3', 's4']
+  );
+});
+
+test('extractTrueMoneyVoucherHash validates TrueMoney URLs and bare voucher codes', () => {
+  assert.equal(
+    extractTrueMoneyVoucherHash('https://gift.truemoney.com/campaign/?v=0192837465abcd'),
+    '0192837465abcd'
+  );
+  assert.equal(extractTrueMoneyVoucherHash('https://evil.example/?v=0192837465abcd'), '');
+  assert.equal(extractTrueMoneyVoucherHash('short'), '');
+  assert.equal(extractTrueMoneyVoucherHash('0192837465abcd'), '0192837465abcd');
 });

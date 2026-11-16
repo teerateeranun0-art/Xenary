@@ -376,3 +376,168 @@ export function computeAdminStats(
   };
 }
 
+// ============================================================================
+// 5. REQUEST SECURITY: CSRF ORIGIN GUARD, COOKIE BUILDER & BOUNDED RATE LIMIT
+// ============================================================================
+
+export function buildSessionCookieHeader(
+  name: string,
+  value: string,
+  options: { maxAgeSeconds?: number; isHttps?: boolean } = {}
+): string {
+  const parts = [`${name}=${value}`, 'Path=/', 'HttpOnly', 'SameSite=Lax'];
+  if (typeof options.maxAgeSeconds === 'number' && Number.isFinite(options.maxAgeSeconds)) {
+    parts.push(`Max-Age=${Math.max(0, Math.floor(options.maxAgeSeconds))}`);
+  }
+  if (options.isHttps) {
+    parts.push('Secure');
+  }
+  return parts.join('; ');
+}
+
+export function isAllowedCsrfRequest(params: {
+  method: string;
+  path: string;
+  origin?: string | string[];
+  referer?: string | string[];
+  host?: string | string[];
+  forwardedHost?: string | string[];
+}): { allowed: boolean; reason?: string } {
+  const method = String(params.method || 'GET').toUpperCase();
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') {
+    return { allowed: true };
+  }
+  if (!String(params.path || '').startsWith('/api/')) {
+    return { allowed: true };
+  }
+
+  const normalizeSingle = (v: string | string[] | undefined): string => {
+    if (Array.isArray(v)) return String(v[0] || '').trim();
+    return String(v || '').trim();
+  };
+
+  const allowedHosts = new Set<string>();
+  const rawHost = normalizeSingle(params.host).toLowerCase();
+  const rawFwd = normalizeSingle(params.forwardedHost).split(',')[0].trim().toLowerCase();
+  if (rawHost) allowedHosts.add(rawHost);
+  if (rawFwd) allowedHosts.add(rawFwd);
+
+  if (allowedHosts.size === 0) {
+    return { allowed: true };
+  }
+
+  const origin = normalizeSingle(params.origin);
+  if (origin) {
+    if (origin.toLowerCase() === 'null') {
+      return { allowed: false, reason: 'null_origin' };
+    }
+    try {
+      const originHost = new URL(origin).host.toLowerCase();
+      if (!allowedHosts.has(originHost)) {
+        return { allowed: false, reason: 'origin_mismatch' };
+      }
+      return { allowed: true };
+    } catch {
+      return { allowed: false, reason: 'invalid_origin' };
+    }
+  }
+
+  const referer = normalizeSingle(params.referer);
+  if (referer) {
+    try {
+      const refHost = new URL(referer).host.toLowerCase();
+      if (!allowedHosts.has(refHost)) {
+        return { allowed: false, reason: 'referer_mismatch' };
+      }
+      return { allowed: true };
+    } catch {
+      return { allowed: false, reason: 'invalid_referer' };
+    }
+  }
+
+  return { allowed: true };
+}
+
+export class BoundedRateLimiter {
+  private readonly store = new Map<string, { count: number; resetAt: number }>();
+
+  constructor(private readonly maxEntries = 10_000) {}
+
+  get size(): number {
+    return this.store.size;
+  }
+
+  check(key: string, maxAttempts: number, windowMs: number, now = Date.now()): boolean {
+    if (this.store.size >= this.maxEntries) {
+      for (const [k, v] of this.store.entries()) {
+        if (v.resetAt <= now) {
+          this.store.delete(k);
+        }
+      }
+      if (this.store.size >= this.maxEntries) {
+        const overflow = this.store.size - this.maxEntries + 1;
+        let removed = 0;
+        for (const k of this.store.keys()) {
+          this.store.delete(k);
+          removed += 1;
+          if (removed >= overflow) break;
+        }
+      }
+    }
+
+    const entry = this.store.get(key);
+    if (!entry || entry.resetAt <= now) {
+      this.store.set(key, { count: 1, resetAt: now + windowMs });
+      return true;
+    }
+    if (entry.count >= maxAttempts) {
+      return false;
+    }
+    entry.count += 1;
+    return true;
+  }
+}
+
+export function pruneExpiredSessions<T extends { exp: number; uid?: string }>(
+  sessions: T[],
+  now = Date.now(),
+  maxPerUser = 10,
+  targetUid?: string
+): T[] {
+  const active = (sessions || []).filter((s) => s && Number(s.exp) > now);
+  if (!targetUid || maxPerUser <= 0) {
+    return active;
+  }
+  const userSessions = active.filter((s) => s.uid === targetUid);
+  if (userSessions.length < maxPerUser) {
+    return active;
+  }
+  // Keep only the newest (maxPerUser - 1) sessions for targetUid so issuing 1 stays within cap
+  const sortedKeep = userSessions
+    .slice()
+    .sort((a, b) => Number(b.exp) - Number(a.exp))
+    .slice(0, maxPerUser - 1);
+  const keepSet = new Set(sortedKeep);
+  return active.filter((s) => s.uid !== targetUid || keepSet.has(s));
+}
+
+export function extractTrueMoneyVoucherHash(rawLink: unknown): string {
+  const str = String(rawLink || '').trim();
+  if (!str || str.length > 512) return '';
+  let candidate = str;
+  if (/^https?:\/\//i.test(str)) {
+    try {
+      const parsed = new URL(str);
+      if (parsed.hostname !== 'gift.truemoney.com') return '';
+      candidate = parsed.searchParams.get('v') || '';
+    } catch {
+      return '';
+    }
+  } else if (str.includes('v=')) {
+    candidate = str.replace(/.*[?&]v=/, '').split('&')[0] || '';
+  }
+  const clean = candidate.replace(/[^a-zA-Z0-9_-]/g, '');
+  if (clean.length < 8 || clean.length > 128) return '';
+  return clean;
+}
+

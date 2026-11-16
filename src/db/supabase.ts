@@ -10,6 +10,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { resolveSupabaseConfig } from './config';
 import {
   COLLECTION_SPECS,
+  chunkArray,
   normalizeCatalogPayload,
   productToRow,
   rowToProduct,
@@ -163,17 +164,21 @@ export class SupabaseStore {
       .filter((id) => !targetIds.has(id));
 
     if (rows.length > 0) {
-      this.assertOk(
-        await this.client.from(table).upsert(rows, { onConflict: conflictTarget }),
-        `upsert rows into ${table}`
-      );
+      for (const batch of chunkArray(rows, 200)) {
+        this.assertOk(
+          await this.client.from(table).upsert(batch, { onConflict: conflictTarget }),
+          `upsert rows into ${table}`
+        );
+      }
     }
 
     if (toDelete.length > 0) {
-      this.assertOk(
-        await this.client.from(table).delete().in(conflictTarget, toDelete),
-        `delete stale rows from ${table}`
-      );
+      for (const idBatch of chunkArray(toDelete, 100)) {
+        this.assertOk(
+          await this.client.from(table).delete().in(conflictTarget, idBatch),
+          `delete stale rows from ${table}`
+        );
+      }
     }
   }
 
