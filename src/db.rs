@@ -1506,8 +1506,24 @@ pub fn evaluate_coupon(
     Ok(discount_sat)
 }
 
+fn normalize_local_product_img(url: &str, slug: &str) -> String {
+    let trimmed = url.trim();
+    if trimmed.is_empty() || trimmed.contains("img2.pic.in.th/serifaimcolor") {
+        return if slug == "val-external" || trimmed.contains("serifvalopro") {
+            "/assets/img/val-external.png".to_string()
+        } else {
+            "/assets/img/aim-color.png".to_string()
+        };
+    }
+    if trimmed.contains("img2.pic.in.th/serifvalopro") {
+        return "/assets/img/val-external.png".to_string();
+    }
+    trimmed.to_string()
+}
+
 pub fn enrich_products_with_keys(products: &mut [Product], keys: &[ProductKey]) {
     for p in products.iter_mut() {
+        p.img = normalize_local_product_img(&p.img, &p.slug);
         let mut min_price = f64::INFINITY;
         for pl in &p.plans {
             if pl.price < min_price {

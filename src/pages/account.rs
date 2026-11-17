@@ -58,9 +58,12 @@ pub fn AccountPage() -> impl IntoView {
     let busy = RwSignal::new(false);
 
     let orders_res = LocalResource::new(move || {
-        let _u = ctx.user.get();
+        let has_user = ctx.user.get().is_some();
         let _r = reload_acc.get();
         async move {
+            if !has_user {
+                return vec![];
+            }
             api_get::<OrdersResp>("/api/orders")
                 .await
                 .map(|r| r.orders)
@@ -69,9 +72,12 @@ pub fn AccountPage() -> impl IntoView {
     });
 
     let topups_res = LocalResource::new(move || {
-        let _u = ctx.user.get();
+        let has_user = ctx.user.get().is_some();
         let _r = reload_acc.get();
         async move {
+            if !has_user {
+                return vec![];
+            }
             api_get::<TopupsResp>("/api/topup/history")
                 .await
                 .map(|r| r.topups)

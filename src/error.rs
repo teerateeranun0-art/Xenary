@@ -4,6 +4,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+#[cfg(feature = "ssr")]
 use serde_json::json;
 use thiserror::Error;
 

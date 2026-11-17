@@ -477,7 +477,7 @@ fn ProductDetailView(slug: String) -> impl IntoView {
                                                 type="button"
                                                 id="inf-qty-minus"
                                                 aria-label="ลดจำนวน"
-                                                disabled=move || qty.get() <= 1
+                                                disabled={move || qty.get() <= 1}
                                                 on:click=move |_| qty.update(|q| if *q > 1 { *q -= 1; })
                                             >"-"</button>
                                             <b>{move || qty.get().to_string()}</b>
@@ -485,7 +485,7 @@ fn ProductDetailView(slug: String) -> impl IntoView {
                                                 type="button"
                                                 id="inf-qty-plus"
                                                 aria-label="เพิ่มจำนวน"
-                                                disabled=move || qty.get() >= 50
+                                                disabled={move || qty.get() >= 50}
                                                 on:click=move |_| qty.update(|q| if *q < 50 { *q += 1; })
                                             >"+"</button>
                                         </div>
@@ -525,7 +525,7 @@ fn ProductDetailView(slug: String) -> impl IntoView {
                                         <button
                                             type="button"
                                             class="inf-cta-buy"
-                                            disabled=move || !can_buy
+                                            disabled={move || !can_buy}
                                             on:click=move |ev| on_buy.run(ev)
                                         >
                                             {move || if busy.get() {
